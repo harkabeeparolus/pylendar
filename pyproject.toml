@@ -1,0 +1,20 @@
+[project]
+name = "pylendar"
+version = "0.1.0"
+description = "Python port of the calendar reminder utility commonly found on BSD-style systems, which displays upcoming relevant dates."
+readme = "README.md"
+urls.source = "https://github.com/harkabeeparolus/pylendar"
+authors = [
+    { name = "Fredrik Mellström", email = "11281108+harkabeeparolus@users.noreply.github.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "python-dateutil>=2.9.0.post0",
+]
+
+[project.scripts]
+pylendar = "pylendar:main"
+
+[build-system]
+requires = ["uv_build>=0.7.19,<0.8"]
+build-backend = "uv_build"
