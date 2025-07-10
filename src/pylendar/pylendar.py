@@ -56,6 +56,56 @@ try:
 except ImportError:
     sys.exit("Error: This script requires the 'python-dateutil' package.")
 
+XDG_CONFIG_HOME = Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config"))
+DEFAULT_CALENDAR_PATHS: list[Path | str] = [
+    XDG_CONFIG_HOME / "calendar",
+    "/etc/calendar",
+    "/usr/share/calendar",
+    "/usr/local/share/calendar",
+]
+
+
+def main():
+    """Run the calendar utility."""
+    parser = build_parser()
+    args = parser.parse_args()
+
+    today = datetime.date.today()
+    if args.t:
+        try:
+            today = parse_today_arg(args.t)
+        except ValueError as e:
+            sys.exit(f"Error: Could not parse -t argument: {e}")
+
+    calendar_lines = []
+    calendar_path = (
+        Path(args.file) if args.file else find_user_calendar(DEFAULT_CALENDAR_PATHS)
+    )
+    processor = SimpleCPP(include_dirs=DEFAULT_CALENDAR_PATHS)
+    try:
+        calendar_lines = processor.process_file(calendar_path)
+    except OSError as e:
+        sys.exit(f"Error: Could not read calendar file: {e}")
+
+    ahead, behind = get_ahead_behind(args, today)
+    dates_to_check = get_dates_to_check(today, ahead=ahead, behind=behind)
+
+    # Parse special dates and aliases once
+    special_dates = parse_special_dates(calendar_lines, today.year)
+
+    # Create a DateStringParser instance with special dates
+    parser = DateStringParser(special_dates)
+
+    if args.debug:
+        print(f"Debug: File path = {calendar_path}")
+        print(f"Debug: Today is {today}")
+        print(f"Debug: Ahead = {ahead}, Behind = {behind}")
+        print(f"Debug: {dates_to_check =}")
+        print(f"Debug: {special_dates =}")
+
+    for line in calendar_lines:
+        print_for_matching_dates(line, dates_to_check, parser)
+
 
 class DateStringParser:
     """Parser for date strings from calendar files."""
@@ -135,16 +185,18 @@ def remove_comments(code: str) -> str:
 class SimpleCPP:
     """A simple C/C++ preprocessor emulator."""
 
-    def __init__(self, include_dirs: list[Path]) -> None:
+    def __init__(self, include_dirs: list[Path | str]) -> None:
         """Initialize the preprocessor with include directories."""
-        self.include_dirs = include_dirs
+        self.include_dirs = [Path(d) for d in include_dirs]
+        print(f"Include directories: {self.include_dirs = }", file=sys.stderr)
         self.included_files: set[Path] = set()
 
-    def process_file(self, path: Path) -> str:
+    def process_file(self, path: Path) -> list[str]:
         """Process a C/C++ source file, resolving includes and removing comments."""
         abs_path = path.resolve()
+        print(f"Processing file: {abs_path}", file=sys.stderr)
         if abs_path in self.included_files:
-            return ""
+            return [""]
         self.included_files.add(abs_path)
 
         lines = []
@@ -154,13 +206,14 @@ class SimpleCPP:
             if stripped.startswith("#include"):
                 match = re.match(r'#include\s+[<"]([^">]+)[">]', stripped)
                 if match:
-                    include_target = match.group(1)
+                    include_target = Path(match.group(1))
                     include_file = self.resolve_include(include_target, abs_path.parent)
                     if include_file:
-                        lines.append(self.process_file(include_file))
+                        lines.extend(self.process_file(include_file))
                     else:
                         msg = f"Included file not found: {include_target}"
-                        raise FileNotFoundError(msg)
+                        # raise FileNotFoundError(msg)
+                        print(f"Warning: {msg}", file=sys.stderr)
                 else:
                     msg = f"Malformed include directive: {line}"
                     raise SyntaxError(msg)
@@ -171,35 +224,21 @@ class SimpleCPP:
                 lines.append(line)
 
         code = "\n".join(lines)
-        return remove_comments(code)
+        return remove_comments(code).splitlines()
 
-    def resolve_include(self, name: str, current_dir: Path) -> Path | None:
+    def resolve_include(
+        self, name: Path, look_first: Path | None = None
+    ) -> Path | None:
         """Try to find an include file.
 
         Resolve the file name against the current directory and include directories.
         """
-        for base in [current_dir, *self.include_dirs]:
-            candidate = base / name
+        dirs = [look_first, *self.include_dirs] if look_first else self.include_dirs
+        for base_dir in dirs:
+            candidate = base_dir / name
             if candidate.is_file():
                 return candidate.resolve()
         return None
-
-
-def main2():
-    if len(sys.argv) < 2:
-        print("Usage: python simple_cpp_emulator.py <input_file> [include_dir ...]")
-        sys.exit(1)
-
-    input_path = Path(sys.argv[1])
-    include_dirs = [Path(p).resolve() for p in sys.argv[2:]]
-
-    try:
-        preprocessor = SimpleCPP(include_dirs)
-        output = preprocessor.process_file(input_path)
-        print(output)
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
 
 
 def parse_special_dates(calendar_lines, year):
@@ -374,57 +413,17 @@ def print_for_matching_dates(line, dates_to_check, parser):
             break
 
 
-def find_default_calendar():
+def find_user_calendar(look_in: list[str | Path]) -> Path:
     """Resolve the calendar file path according to BSD calendar rules."""
-    result = Path("calendar")
-    if (path := Path("calendar")).is_file() or (
-        path := Path.home() / ".calendar"
-    ).is_file():
-        result = path
-    elif (path := Path.home() / ".calendar" / "calendar").is_file():
-        result = path
-        os.chdir(path.parent)  # Change to the directory of the calendar file
-    return result.resolve()
-
-
-def main():
-    """Run the calendar utility."""
-    parser = build_parser()
-    args = parser.parse_args()
-
-    if args.t:
-        try:
-            today = parse_today_arg(args.t)
-        except ValueError as e:
-            sys.exit(f"Error: Could not parse -t argument: {e}")
-    else:
-        today = datetime.date.today()
-
-    calendar_lines = []
-    if calendar_path := args.file or find_default_calendar():
-        try:
-            calendar_lines = read_calendar_lines(calendar_path)
-        except OSError as e:
-            sys.exit(f"Error: Could not read calendar file: {e}")
-
-    ahead, behind = get_ahead_behind(args, today)
-    dates_to_check = get_dates_to_check(today, ahead=ahead, behind=behind)
-
-    # Parse special dates and aliases once
-    special_dates = parse_special_dates(calendar_lines, today.year)
-
-    # Create a DateStringParser instance with special dates
-    parser = DateStringParser(special_dates)
-
-    if args.debug:
-        print(f"Debug: File path = {calendar_path}")
-        print(f"Debug: Today is {today}")
-        print(f"Debug: Ahead = {ahead}, Behind = {behind}")
-        print(f"Debug: {dates_to_check =}")
-        print(f"Debug: {special_dates =}")
-
-    for line in calendar_lines:
-        print_for_matching_dates(line, dates_to_check, parser)
+    dirs = [Path.cwd(), *look_in]
+    if (my_dir := (Path.home() / ".calendar").resolve()).is_dir():
+        os.chdir(my_dir)
+        dirs.insert(1, my_dir)
+    for dir_path in dirs:
+        file = dir_path / "calendar"
+        if file.is_file():
+            return file.resolve()
+    return Path("calendar")
 
 
 if __name__ == "__main__":
