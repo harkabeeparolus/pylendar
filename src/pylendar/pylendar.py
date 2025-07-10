@@ -287,7 +287,7 @@ def print_for_matching_dates(line, dates_to_check, parser):
                 year_val = int(match.group(1))
                 age = check_date.year - year_val
                 desc = re.sub(r"\[(\d{4})\]", str(age), event_description)
-            formatted_date = f"{check_date:%b %d}"
+            formatted_date = f"{check_date:%b} {check_date.day:2}"
             print(f"{formatted_date}\t{desc.strip()}")
             break
 
