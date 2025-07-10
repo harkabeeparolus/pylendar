@@ -5,15 +5,14 @@ description = "Python port of the calendar reminder utility commonly found on BS
 readme = "README.md"
 urls.source = "https://github.com/harkabeeparolus/pylendar"
 authors = [
-    { name = "Fredrik Mellström", email = "11281108+harkabeeparolus@users.noreply.github.com" }
+    { name = "Fredrik Mellström", email = "11281108+harkabeeparolus@users.noreply.github.com" },
 ]
 requires-python = ">=3.11"
-dependencies = [
-    "python-dateutil>=2.9.0.post0",
-]
+dependencies = ["python-dateutil>=2.9.0.post0"]
 
 [project.scripts]
 pylendar = "pylendar:main"
+calendar = "pylendar:main"
 
 [build-system]
 requires = ["uv_build>=0.7.19,<0.8"]
