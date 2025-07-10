@@ -1,6 +1,6 @@
 [project]
 name = "pylendar"
-version = "0.1.0"
+version = "0.2.0"
 description = "Python port of the calendar reminder utility commonly found on BSD-style systems, which displays upcoming relevant dates."
 readme = "README.md"
 urls.source = "https://github.com/harkabeeparolus/pylendar"
@@ -36,8 +36,8 @@ ignore = [
 
 [tool.pylint]
 main.py-version = "3.11"
-reports.output-format = "colorized"
 main.jobs = 0                       # 0 means all available cores
+reports.output-format = "colorized"
 
 [tool.pylint."messages control"]
 disable = ["logging-fstring-interpolation", "logging-format-interpolation"]
