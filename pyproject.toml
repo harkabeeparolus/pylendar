@@ -19,7 +19,7 @@ requires = ["uv_build>=0.7.19,<0.8"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dev = ["pylint>=3.3.7"]
+dev = ["pylint>=3.3.7", "pytest>=6.0"]
 
 # Linting configuration
 
