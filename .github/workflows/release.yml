@@ -1,0 +1,11 @@
+name: Test Release Trigger
+
+on:
+  release:
+    types: [published, released]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Release triggered!"
