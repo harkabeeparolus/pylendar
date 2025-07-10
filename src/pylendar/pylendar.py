@@ -46,6 +46,7 @@ Jul 4	US Independence Day
 import argparse
 import calendar
 import datetime
+import os
 import re
 import sys
 from pathlib import Path
@@ -118,6 +119,87 @@ class DateStringParser:
             return None, day  # None for month signifies a wildcard
 
         return None, None
+
+
+def remove_comments(code: str) -> str:
+    """Remove comments from C/C++ code.
+
+    This function removes both block comments (/* ... */) and line comments (// ...).
+
+    However, it does not handle nested comments or comments within strings.
+    """
+    code = re.sub(r"/\*.*?\*/", "", code, flags=re.DOTALL)  # Remove block comments
+    return re.sub(r"//.*", "", code)  # Remove line comments
+
+
+class SimpleCPP:
+    """A simple C/C++ preprocessor emulator."""
+
+    def __init__(self, include_dirs: list[Path]) -> None:
+        """Initialize the preprocessor with include directories."""
+        self.include_dirs = include_dirs
+        self.included_files: set[Path] = set()
+
+    def process_file(self, path: Path) -> str:
+        """Process a C/C++ source file, resolving includes and removing comments."""
+        abs_path = path.resolve()
+        if abs_path in self.included_files:
+            return ""
+        self.included_files.add(abs_path)
+
+        lines = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+
+            if stripped.startswith("#include"):
+                match = re.match(r'#include\s+[<"]([^">]+)[">]', stripped)
+                if match:
+                    include_target = match.group(1)
+                    include_file = self.resolve_include(include_target, abs_path.parent)
+                    if include_file:
+                        lines.append(self.process_file(include_file))
+                    else:
+                        msg = f"Included file not found: {include_target}"
+                        raise FileNotFoundError(msg)
+                else:
+                    msg = f"Malformed include directive: {line}"
+                    raise SyntaxError(msg)
+            elif re.match(r"#(define|ifndef|endif)", stripped):
+                # Skip basic preprocessor guards (emulated via included_files)
+                continue
+            else:
+                lines.append(line)
+
+        code = "\n".join(lines)
+        return remove_comments(code)
+
+    def resolve_include(self, name: str, current_dir: Path) -> Path | None:
+        """Try to find an include file.
+
+        Resolve the file name against the current directory and include directories.
+        """
+        for base in [current_dir, *self.include_dirs]:
+            candidate = base / name
+            if candidate.is_file():
+                return candidate.resolve()
+        return None
+
+
+def main2():
+    if len(sys.argv) < 2:
+        print("Usage: python simple_cpp_emulator.py <input_file> [include_dir ...]")
+        sys.exit(1)
+
+    input_path = Path(sys.argv[1])
+    include_dirs = [Path(p).resolve() for p in sys.argv[2:]]
+
+    try:
+        preprocessor = SimpleCPP(include_dirs)
+        output = preprocessor.process_file(input_path)
+        print(output)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 def parse_special_dates(calendar_lines, year):
@@ -294,16 +376,15 @@ def print_for_matching_dates(line, dates_to_check, parser):
 
 def find_default_calendar():
     """Resolve the calendar file path according to BSD calendar rules."""
-    paths = (
-        Path("calendar"),
-        Path.home() / ".calendar",
-        Path.home() / ".calendar" / "calendar",
-    )
-    for path in paths:
-        if path.is_file():
-            return path
-    # Fallback: just use ./calendar (will error if not found)
-    return paths[0]
+    result = Path("calendar")
+    if (path := Path("calendar")).is_file() or (
+        path := Path.home() / ".calendar"
+    ).is_file():
+        result = path
+    elif (path := Path.home() / ".calendar" / "calendar").is_file():
+        result = path
+        os.chdir(path.parent)  # Change to the directory of the calendar file
+    return result.resolve()
 
 
 def main():
