@@ -59,9 +59,10 @@ except ImportError:
 XDG_CONFIG_HOME = Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config"))
 DEFAULT_CALENDAR_PATHS: list[Path | str] = [
     XDG_CONFIG_HOME / "calendar",
-    "/etc/calendar",
-    "/usr/share/calendar",
-    "/usr/local/share/calendar",
+    Path.home() / ".calendar",
+    Path("/etc/calendar"),
+    Path("/usr/share/calendar"),
+    Path("/usr/local/share/calendar"),
 ]
 
 
