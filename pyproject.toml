@@ -1,6 +1,6 @@
 [project]
 name = "pylendar"
-version = "0.2.0"
+version = "0.2.1"
 description = "Python port of the calendar reminder utility commonly found on BSD-style systems, which displays upcoming relevant dates."
 readme = "README.md"
 urls.source = "https://github.com/harkabeeparolus/pylendar"
