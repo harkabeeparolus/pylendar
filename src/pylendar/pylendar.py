@@ -1,7 +1,7 @@
 #! /usr/bin/env -S uv run --script
 
 # /// script
-# requires-python = ">=3.12"
+# requires-python = ">=3.11"
 # dependencies = [
 #     "python-dateutil",
 # ]
@@ -44,6 +44,7 @@ Jul 4	US Independence Day
 """
 
 import argparse
+import calendar
 import datetime
 import re
 import sys
@@ -52,38 +53,71 @@ from pathlib import Path
 try:
     import dateutil.easter
 except ImportError:
-    msg = (
-        "Error: This script requires the 'python-dateutil' package. Please install it "
-        "with 'pip install python-dateutil'"
-    )
-    sys.exit(msg)
+    sys.exit("Error: This script requires the 'python-dateutil' package.")
 
-# A map to convert month names/abbreviations to a number.
-MONTH_MAP = {
-    "jan": 1,
-    "january": 1,
-    "feb": 2,
-    "february": 2,
-    "mar": 3,
-    "march": 3,
-    "apr": 4,
-    "april": 4,
-    "may": 5,
-    "jun": 6,
-    "june": 6,
-    "jul": 7,
-    "july": 7,
-    "aug": 8,
-    "august": 8,
-    "sep": 9,
-    "september": 9,
-    "oct": 10,
-    "october": 10,
-    "nov": 11,
-    "november": 11,
-    "dec": 12,
-    "december": 12,
-}
+
+class DateStringParser:
+    """Parser for date strings from calendar files."""
+
+    month_map: dict[str, int]
+
+    def __init__(self, special_dates=None):
+        """Initialize the parser with optional special dates."""
+        self.special_dates = special_dates or {}
+        self.month_map = self.build_month_map()
+
+        # Ensure we have month names in US English locale
+        with calendar.different_locale("C"):  # type: ignore[reportArgumentType]
+            self.month_map.update(self.build_month_map())
+
+    @staticmethod
+    def build_month_map() -> dict[str, int]:
+        """Build a map of month names and abbreviations to their respective numbers.
+
+        This uses the current locale at the time of execution.
+        """
+        return {
+            m.lower(): n
+            for s in (calendar.month_name, calendar.month_abbr)
+            for n, m in enumerate(s)
+            if m
+        }
+
+    def parse(self, date_str):
+        """Parse a date string from the calendar file.
+
+        Supports special dates and aliases.
+        """
+        date_str = date_str.strip().lower()
+
+        # Handle special dates and aliases
+        if special_date := self.special_dates.get(date_str):
+            return special_date.month, special_date.day
+
+        # Pattern 1: MM/DD (e.g., 07/09)
+        match = re.fullmatch(r"(?P<month>\d{1,2})/(?P<day>\d{1,2})", date_str)
+        if match:
+            month = int(match.group("month"))
+            day = int(match.group("day"))
+            return month, day
+
+        # Pattern 2: Month DD (e.g., July 9 or Jul 9)
+        match = re.fullmatch(
+            r"(?P<month_name>[a-z]{3,24})\s+(?P<day>\d{1,2})", date_str
+        )
+        if match:
+            month_name = match.group("month_name")
+            day = int(match.group("day"))
+            if month_name in self.month_map:
+                return self.month_map[month_name], day
+
+        # Pattern 3: * DD (e.g., * 9)
+        match = re.fullmatch(r"\*\s+(?P<day>\d{1,2})", date_str)
+        if match:
+            day = int(match.group("day"))
+            return None, day  # None for month signifies a wildcard
+
+        return None, None
 
 
 def parse_special_dates(calendar_lines, year):
@@ -103,37 +137,6 @@ def parse_special_dates(calendar_lines, year):
             elif right in special_dates:
                 special_dates[left] = special_dates[right]
     return special_dates
-
-
-def parse_date_string(date_str, special_dates=None):
-    """Parse a date string from the calendar file, with support for special dates and aliases."""
-    date_str = date_str.strip().lower()
-    if special_dates is None:
-        special_dates = {}
-
-    # Handle special dates and aliases
-    if special_date := special_dates.get(date_str):
-        return special_date.month, special_date.day
-
-    # Pattern 1: MM/DD (e.g., 07/09)
-    if match := re.fullmatch(r"(\d\d)/(\d\d)", date_str):
-        month, day = int(match.group(1)), int(match.group(2))
-        return month, day
-
-    # Pattern 2: Month DD (e.g., July 9 or Jul 9)
-    match = re.fullmatch(r"([a-z]{3,9})\s+(\d{1,2})", date_str)
-    if match:
-        month_name, day = match.group(1), int(match.group(2))
-        if month_name in MONTH_MAP:
-            return MONTH_MAP[month_name], day
-
-    # Pattern 3: * DD (e.g., * 9)
-    match = re.fullmatch(r"\*\s+(\d{1,2})", date_str)
-    if match:
-        day = int(match.group(1))
-        return None, day  # None for month signifies a wildcard
-
-    return None, None
 
 
 def parse_today_arg(t_str):
@@ -164,7 +167,8 @@ def parse_today_arg(t_str):
         mm = int(t_str[4:6])
         dd = int(t_str[6:])
         return datetime.date(year, mm, dd)
-    raise ValueError(f"Invalid -t date format: {t_str}")
+    msg = f"Invalid -t date format: {t_str}"
+    raise ValueError(msg)
 
 
 def get_dates_to_check(today, ahead=1, behind=0):
@@ -249,8 +253,11 @@ def get_ahead_behind(args, today):
     return ahead, behind
 
 
-def print_for_matching_dates(line, dates_to_check, year=None, special_dates=None):
-    """Print the event line if it matches any of the dates to check, with special date support."""
+def print_for_matching_dates(line, dates_to_check, parser):
+    """Print the event line if it matches any of the dates to check.
+
+    Use the provided parser to parse datetime strings.
+    """
     if line.startswith("#") or not line.strip():
         return
 
@@ -258,7 +265,7 @@ def print_for_matching_dates(line, dates_to_check, year=None, special_dates=None
     if "\t" not in line:
         return
     date_str, event_description = line.split("\t", 1)
-    parsed_month, parsed_day = parse_date_string(date_str, special_dates)
+    parsed_month, parsed_day = parser.parse(date_str)
     if parsed_day is None:
         return
     for check_date in dates_to_check:
@@ -317,6 +324,8 @@ def main():
     dates_to_check = get_dates_to_check(today, ahead=ahead, behind=behind)
     # Parse special dates and aliases once
     special_dates = parse_special_dates(calendar_lines, today.year)
+    # Create a DateStringParser instance with special dates
+    parser = DateStringParser(special_dates)
     if args.debug:
         print(f"Debug: File path = {calendar_path}")
         print(f"Debug: Today is {today}")
@@ -324,7 +333,7 @@ def main():
         print(f"Debug: {dates_to_check =}")
         print(f"Debug: {special_dates =}")
     for line in calendar_lines:
-        print_for_matching_dates(line, dates_to_check, today.year, special_dates)
+        print_for_matching_dates(line, dates_to_check, parser)
 
     return 0
 

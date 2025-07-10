@@ -2,4 +2,4 @@
 
 from .pylendar import main
 
-__ALL__ = ["main"]
+__all__ = ["main"]
