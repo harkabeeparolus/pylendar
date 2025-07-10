@@ -140,9 +140,12 @@ def parse_special_dates(calendar_lines, year):
 
 
 def parse_today_arg(t_str):
-    """Parse the -t argument and return a datetime.date object."""
+    """Parse the -t argument and return a datetime.date object.
+
+    Acceptable formats are: dd, mmdd, yymmdd, ccyymmdd
+    """
     t_str = t_str.strip()
-    # Acceptable formats: dd, mmdd, yymmdd, ccyymmdd
+    # cSpell:ignore mmdd, ccyymmdd
     if re.fullmatch(r"\d{2}", t_str):
         # dd
         today = datetime.date.today()
@@ -312,30 +315,35 @@ def main():
         try:
             today = parse_today_arg(args.t)
         except ValueError as e:
-            print(f"Error: Could not parse -t argument: {e}", file=sys.stderr)
-            return 1
+            sys.exit(f"Error: Could not parse -t argument: {e}")
     else:
         today = datetime.date.today()
 
     calendar_lines = []
     if calendar_path := args.file or find_default_calendar():
-        calendar_lines = read_calendar_lines(calendar_path)
+        try:
+            calendar_lines = read_calendar_lines(calendar_path)
+        except OSError as e:
+            sys.exit(f"Error: Could not read calendar file: {e}")
+
     ahead, behind = get_ahead_behind(args, today)
     dates_to_check = get_dates_to_check(today, ahead=ahead, behind=behind)
+
     # Parse special dates and aliases once
     special_dates = parse_special_dates(calendar_lines, today.year)
+
     # Create a DateStringParser instance with special dates
     parser = DateStringParser(special_dates)
+
     if args.debug:
         print(f"Debug: File path = {calendar_path}")
         print(f"Debug: Today is {today}")
         print(f"Debug: Ahead = {ahead}, Behind = {behind}")
         print(f"Debug: {dates_to_check =}")
         print(f"Debug: {special_dates =}")
+
     for line in calendar_lines:
         print_for_matching_dates(line, dates_to_check, parser)
-
-    return 0
 
 
 if __name__ == "__main__":
