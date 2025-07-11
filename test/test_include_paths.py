@@ -12,6 +12,12 @@ def test_home_calendar_in_default_paths():
     assert home_calendar in DEFAULT_CALENDAR_PATHS
 
 
+def test_home_calendar_is_first_in_default_paths():
+    """Test that ~/.calendar is the first directory in DEFAULT_CALENDAR_PATHS."""
+    home_calendar = Path.home() / ".calendar"
+    assert DEFAULT_CALENDAR_PATHS[0] == home_calendar
+
+
 def test_simplecpp_include_dirs_contains_home_calendar():
     """Test that SimpleCPP instance includes ~/.calendar in include directories."""
     processor = SimpleCPP(include_dirs=DEFAULT_CALENDAR_PATHS)
