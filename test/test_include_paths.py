@@ -1,6 +1,5 @@
 """Test that ~/.calendar is included in SimpleCPP include paths."""
 
-import tempfile
 from pathlib import Path
 
 from pylendar.pylendar import DEFAULT_CALENDAR_PATHS, SimpleCPP
@@ -25,28 +24,27 @@ def test_simplecpp_include_dirs_contains_home_calendar():
     assert home_calendar in processor.include_dirs
 
 
-def test_simplecpp_can_resolve_from_home_calendar():
+def test_simplecpp_can_resolve_from_home_calendar(tmp_path):
     """Test that SimpleCPP can resolve includes from ~/.calendar directory."""
-    with tempfile.TemporaryDirectory() as temp_dir:
-        # Create a temporary ~/.calendar-like directory
-        fake_home_calendar = Path(temp_dir) / ".calendar"
-        fake_home_calendar.mkdir()
+    # Create a temporary ~/.calendar-like directory
+    fake_home_calendar = tmp_path / ".calendar"
+    fake_home_calendar.mkdir()
 
-        # Create an include file in the fake ~/.calendar directory
-        include_file = fake_home_calendar / "holidays"
-        include_file.write_text("01/01\tNew Year's Day\n")
+    # Create an include file in the fake ~/.calendar directory
+    include_file = fake_home_calendar / "holidays"
+    include_file.write_text("01/01\tNew Year's Day\n")
 
-        # Create a main calendar file that includes the holidays file
-        main_calendar = Path(temp_dir) / "calendar"
-        main_calendar.write_text('#include "holidays"\n07/04\tIndependence Day\n')
+    # Create a main calendar file that includes the holidays file
+    main_calendar = tmp_path / "calendar"
+    main_calendar.write_text('#include "holidays"\n07/04\tIndependence Day\n')
 
-        # Create SimpleCPP with include directories including our fake home calendar
-        include_dirs = [fake_home_calendar, "/etc/calendar"]
-        processor = SimpleCPP(include_dirs=include_dirs)
+    # Create SimpleCPP with include directories including our fake home calendar
+    include_dirs = [fake_home_calendar, "/etc/calendar"]
+    processor = SimpleCPP(include_dirs=include_dirs)
 
-        # Process the main calendar file
-        result = processor.process_file(main_calendar)
+    # Process the main calendar file
+    result = processor.process_file(main_calendar)
 
-        # Should contain both the included content and the main content
-        assert "01/01\tNew Year's Day" in result
-        assert "07/04\tIndependence Day" in result
+    # Should contain both the included content and the main content
+    assert "01/01\tNew Year's Day" in result
+    assert "07/04\tIndependence Day" in result
