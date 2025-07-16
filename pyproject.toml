@@ -27,11 +27,12 @@ dev = ["pylint>=3.3.7", "pytest>=6.0"]
 flake8-annotations.ignore-fully-untyped = true
 select = ["ALL"]
 ignore = [
-    "COM812", # flake8-commas (COM): COM812 missing-trailing-comma
-    "D203",   # pydocstyle (D): D203 incorrect-blank-line-before-class
-    "D213",   # pydocstyle (D): D213 multi-line-summary-second-line
+    "COM812", # flake8-commas (COM): missing-trailing-comma
+    "D203",   # pydocstyle (D): incorrect-blank-line-before-class
+    "D213",   # pydocstyle (D): multi-line-summary-second-line
     "T20",    # flake8-print (T20)
     "DTZ",    # flake8-datetimez (DTZ)
+    "G004",   # flake8-logging-format (G): logging-f-string
 ]
 
 [tool.pylint]

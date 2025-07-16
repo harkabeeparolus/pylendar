@@ -46,6 +46,7 @@ Jul 4	US Independence Day
 import argparse
 import calendar
 import datetime
+import logging
 import os
 import re
 import sys
@@ -55,6 +56,8 @@ try:
     import dateutil.easter
 except ImportError:
     sys.exit("Error: This script requires the 'python-dateutil' package.")
+
+log = logging.getLogger("pylendar")
 
 XDG_CONFIG_HOME = Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config"))
 DEFAULT_CALENDAR_PATHS: list[Path | str] = [
@@ -68,15 +71,21 @@ DEFAULT_CALENDAR_PATHS: list[Path | str] = [
 
 def main():
     """Run the calendar utility."""
+    setup_logging()
+    try:
+        return cli()
+    except KeyboardInterrupt:
+        sys.exit("Interrupted by user.")
+
+
+def cli():
+    """Command-line interface for the calendar utility."""
     parser = build_parser()
     args = parser.parse_args()
-
-    today = datetime.date.today()
-    if args.t:
-        try:
-            today = parse_today_arg(args.t)
-        except ValueError as e:
-            sys.exit(f"Error: Could not parse -t argument: {e}")
+    if args.verbose > 0:
+        logging.getLogger().setLevel(logging.DEBUG)
+    else:
+        logging.getLogger().setLevel(logging.INFO)
 
     calendar_lines = []
     calendar_path = (
@@ -88,24 +97,32 @@ def main():
     except OSError as e:
         sys.exit(f"Error: Could not read calendar file: {e}")
 
-    ahead, behind = get_ahead_behind(args, today)
-    dates_to_check = get_dates_to_check(today, ahead=ahead, behind=behind)
+    ahead, behind = get_ahead_behind(args, args.today)
+    dates_to_check = get_dates_to_check(args.today, ahead=ahead, behind=behind)
 
     # Parse special dates and aliases once
-    special_dates = parse_special_dates(calendar_lines, today.year)
+    special_dates = parse_special_dates(calendar_lines, args.today.year)
 
     # Create a DateStringParser instance with special dates
     parser = DateStringParser(special_dates)
 
-    if args.debug:
-        print(f"Debug: File path = {calendar_path}")
-        print(f"Debug: Today is {today}")
-        print(f"Debug: Ahead = {ahead}, Behind = {behind}")
-        print(f"Debug: {dates_to_check =}")
-        print(f"Debug: {special_dates =}")
+    log.debug(f"File path = {calendar_path}")
+    log.debug(f"Today is {args.today}")
+    log.debug(f"Ahead = {ahead}, Behind = {behind}")
+    log.debug(f"dates_to_check = {dates_to_check}")
+    log.debug(f"special_dates = {special_dates}")
 
     for line in calendar_lines:
         print_for_matching_dates(line, dates_to_check, parser)
+
+
+def setup_logging():
+    """Set up logging configuration."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
 
 class DateStringParser:
@@ -189,16 +206,16 @@ class SimpleCPP:
     def __init__(self, include_dirs: list[Path | str]) -> None:
         """Initialize the preprocessor with include directories."""
         self.include_dirs = [Path(d) for d in include_dirs]
-        print(f"Include directories: {self.include_dirs = }", file=sys.stderr)
+        log.debug(f"Include directories: {self.include_dirs = }")
         self.included_files: set[Path] = set()
 
     def process_file(self, path: Path) -> list[str]:
         """Process a C/C++ source file, resolving includes and removing comments."""
         abs_path = path.resolve()
         if abs_path in self.included_files:
-            print(f"Skipping {abs_path.name}: already included", file=sys.stderr)
+            log.debug(f"Skipping {abs_path.name}: already included")
             return [""]
-        print(f"Processing {abs_path.name}", file=sys.stderr)
+        log.debug(f"Processing {abs_path.name}")
         self.included_files.add(abs_path)
 
         lines = []
@@ -215,7 +232,7 @@ class SimpleCPP:
                     else:
                         msg = f"Included file not found: {include_target}"
                         # raise FileNotFoundError(msg)
-                        print(f"Warning: {msg}", file=sys.stderr)
+                        log.warning(f"Warning: {msg}")
                 else:
                     msg = f"Malformed include directive: {line}"
                     raise SyntaxError(msg)
@@ -294,7 +311,7 @@ def parse_today_arg(t_str):
         dd = int(t_str[6:])
         return datetime.date(year, mm, dd)
     msg = f"Invalid -t date format: {t_str}"
-    raise ValueError(msg)
+    raise argparse.ArgumentTypeError(msg)
 
 
 def get_dates_to_check(today, ahead=1, behind=0):
@@ -334,14 +351,19 @@ def build_parser():
     parser.add_argument(
         "-t",
         metavar="[[[cc]yy]mm]dd",
+        type=parse_today_arg,
+        default=datetime.date.today,
+        dest="today",
         help="Act like the specified value is 'today' instead of using the current "
         "date. If yy is specified, but cc is not, a value for yy between 69 and 99 "
         "results in a cc value of 19. Otherwise, a cc value of 20 is used.",
     )
     parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable debug output.",
+        "--verbose",
+        "-v",
+        action="count",
+        default=0,
+        help="Increase verbosity (can be used multiple times).",
     )
     return parser
 
