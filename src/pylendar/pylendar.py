@@ -195,9 +195,10 @@ class SimpleCPP:
     def process_file(self, path: Path) -> list[str]:
         """Process a C/C++ source file, resolving includes and removing comments."""
         abs_path = path.resolve()
-        print(f"Processing file: {abs_path}", file=sys.stderr)
         if abs_path in self.included_files:
+            print(f"Skipping {abs_path.name}: already included", file=sys.stderr)
             return [""]
+        print(f"Processing {abs_path.name}", file=sys.stderr)
         self.included_files.add(abs_path)
 
         lines = []
