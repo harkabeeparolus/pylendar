@@ -104,7 +104,7 @@ def cli():
     special_dates = parse_special_dates(calendar_lines, args.today.year)
 
     # Create a DateStringParser instance with special dates
-    parser = DateStringParser(special_dates)
+    date_parser = DateStringParser(special_dates)
 
     log.debug(f"File path = {calendar_path}")
     log.debug(f"Today is {args.today}")
@@ -113,7 +113,7 @@ def cli():
     log.debug(f"special_dates = {special_dates}")
 
     for line in calendar_lines:
-        print_for_matching_dates(line, dates_to_check, parser)
+        print_for_matching_dates(line, dates_to_check, date_parser)
 
 
 def setup_logging():
@@ -197,7 +197,7 @@ def remove_comments(code: str) -> str:
     However, it does not handle nested comments or comments within strings.
     """
     code = re.sub(r"/\*.*?\*/", "", code, flags=re.DOTALL)  # Remove block comments
-    return re.sub(r"//.*", "", code)  # Remove line comments
+    return re.sub(r"(?:^|\s)//.*", "", code)  # Remove line comments
 
 
 class SimpleCPP:
@@ -206,8 +206,9 @@ class SimpleCPP:
     def __init__(self, include_dirs: list[Path | str]) -> None:
         """Initialize the preprocessor with include directories."""
         self.include_dirs = [Path(d) for d in include_dirs]
-        log.debug(f"Include directories: {self.include_dirs = }")
         self.included_files: set[Path] = set()
+        stringified_dirs = [str(d) for d in include_dirs]
+        log.debug(f"Including calendar files from directories: {stringified_dirs}")
 
     def process_file(self, path: Path) -> list[str]:
         """Process a C/C++ source file, resolving includes and removing comments."""
@@ -219,7 +220,7 @@ class SimpleCPP:
         self.included_files.add(abs_path)
 
         lines = []
-        for line in path.read_text(encoding="utf-8").splitlines():
+        for line in remove_comments(path.read_text(encoding="utf-8")).splitlines():
             stripped = line.strip()
 
             if stripped.startswith("#include"):
@@ -238,11 +239,15 @@ class SimpleCPP:
             elif re.match(r"#(define|ifndef|endif)", stripped):
                 # Skip basic preprocessor guards (emulated via included_files)
                 continue
+            elif stripped.startswith("#"):
+                # Handle other preprocessor directives (e.g., #define, #ifdef)
+                # For now, we just skip them as they are not implemented
+                log.debug(f"Skipping preprocessor directive: {line}")
+                continue
             else:
                 lines.append(line)
 
-        code = "\n".join(lines)
-        return remove_comments(code).splitlines()
+        return lines
 
     def resolve_include(
         self, name: Path, look_first: Path | None = None
@@ -264,8 +269,6 @@ def parse_special_dates(calendar_lines, year):
     # Start with known special dates
     special_dates = {"easter": dateutil.easter.easter(year)}
     for line in calendar_lines:
-        if line.strip().startswith("#"):
-            continue
         if "=" in line and "\t" not in line:
             left, right = line.split("=", 1)
             left = left.strip().lower()
@@ -405,7 +408,7 @@ def print_for_matching_dates(line, dates_to_check, parser):
 
     Use the provided parser to parse datetime strings.
     """
-    if line.startswith("#") or not line.strip():
+    if not line.strip():
         return
 
     # Events are separated by a tab character
