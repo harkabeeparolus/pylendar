@@ -1,4 +1,4 @@
-"""Test that ~/.calendar is included in SimpleCPP include paths."""
+"""Test SimpleCPP functionality."""
 
 from pathlib import Path
 
@@ -17,29 +17,32 @@ def test_home_calendar_is_first_in_default_paths():
     assert DEFAULT_CALENDAR_PATHS[0] == home_calendar
 
 
-def test_simplecpp_include_dirs_contains_home_calendar():
-    """Test that SimpleCPP instance includes ~/.calendar in include directories."""
-    processor = SimpleCPP(include_dirs=DEFAULT_CALENDAR_PATHS)
-    home_calendar = Path.home() / ".calendar"
-    assert home_calendar in processor.include_dirs
+def test_simplecpp_custom_include_dir(tmp_path):
+    """Test that SimpleCPP accepts a custom include directory."""
+    dir_name = "AiSei5Ah"
+    temp_dir = tmp_path / dir_name
+    temp_dir.mkdir()
+    processor = SimpleCPP(include_dirs=[*DEFAULT_CALENDAR_PATHS, temp_dir])
+    assert temp_dir in processor.include_dirs
 
 
 def test_simplecpp_can_resolve_from_home_calendar(tmp_path):
     """Test that SimpleCPP can resolve includes from ~/.calendar directory."""
     # Create a temporary ~/.calendar-like directory
-    fake_home_calendar = tmp_path / ".calendar"
-    fake_home_calendar.mkdir()
+    temp_calendar_directory = tmp_path / ".calendar"
+    temp_calendar_directory.mkdir()
 
     # Create an include file in the fake ~/.calendar directory
-    include_file = fake_home_calendar / "holidays"
+    file_name = "xae6eeCi"
+    include_file = temp_calendar_directory / file_name
     include_file.write_text("01/01\tNew Year's Day\n")
 
     # Create a main calendar file that includes the holidays file
     main_calendar = tmp_path / "calendar"
-    main_calendar.write_text('#include "holidays"\n07/04\tIndependence Day\n')
+    main_calendar.write_text(f'#include "{file_name}"\n07/04\tIndependence Day\n')
 
     # Create SimpleCPP with include directories including our fake home calendar
-    include_dirs = [fake_home_calendar, "/etc/calendar"]
+    include_dirs = [temp_calendar_directory, "/etc/calendar"]
     processor = SimpleCPP(include_dirs=include_dirs)
 
     # Process the main calendar file
