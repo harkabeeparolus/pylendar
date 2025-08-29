@@ -50,6 +50,7 @@ import logging
 import os
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 try:
@@ -58,6 +59,7 @@ except ImportError:
     sys.exit("Error: This script requires the 'python-dateutil' package.")
 
 log = logging.getLogger("pylendar")
+
 
 XDG_CONFIG_HOME = Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config"))
 DEFAULT_CALENDAR_PATHS: list[Path | str] = [
@@ -112,20 +114,16 @@ def cli():
     log.debug(f"dates_to_check = {dates_to_check}")
     log.debug(f"special_dates = {special_dates}")
 
-    # Collect all matching events first, then sort by date before printing
+    # Collect calendar events matching any of the current dates
     matching_events = [
         event
         for line in calendar_lines
         if (event := get_matching_event(line, dates_to_check, date_parser))
     ]
 
-    # Sort events by date
-    matching_events.sort(key=lambda event: event[0])  # Sort by date
-
-    # Print sorted events
-    for event_date, event_description in matching_events:
-        formatted_date = f"{event_date:%b} {event_date.day:2}"
-        print(f"{formatted_date}\t{event_description.strip()}")
+    # Sort events by date and print them
+    for event in sorted(matching_events):
+        print(event)
 
 
 def setup_logging():
@@ -135,6 +133,29 @@ def setup_logging():
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+
+
+@dataclass
+class Event:
+    """Represents a calendar event with date and description."""
+
+    date: datetime.date
+    description: str
+
+    def __post_init__(self):
+        """Clean up the description by stripping whitespace."""
+        self.description = self.description.strip()
+
+    def __lt__(self, other):
+        """Enable sorting events by date."""
+        if not isinstance(other, Event):
+            return NotImplemented
+        return self.date < other.date
+
+    def __str__(self) -> str:
+        """Format the event for display output."""
+        formatted_date = f"{self.date:%b} {self.date.day:2}"
+        return f"{formatted_date}\t{self.description}"
 
 
 class DateStringParser:
@@ -418,7 +439,7 @@ def get_ahead_behind(args, today):
 def get_matching_event(line, dates_to_check, parser):
     """Get the event from this line if it matches any of the target dates.
 
-    Returns a (date, event_description) tuple if the event matches any of the
+    Returns an Event object if the event matches any of the
     dates to check, or None if there's no match.
     """
     if not line.strip():
@@ -450,7 +471,7 @@ def get_matching_event(line, dates_to_check, parser):
                 age = check_date.year - year_val
                 desc = re.sub(r"\[(\d{4})\]", str(age), event_description)
 
-            return (check_date, desc)
+            return Event(check_date, desc)
 
     return None
 
