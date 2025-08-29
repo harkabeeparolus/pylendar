@@ -50,6 +50,7 @@ import logging
 import os
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 try:
@@ -58,6 +59,7 @@ except ImportError:
     sys.exit("Error: This script requires the 'python-dateutil' package.")
 
 log = logging.getLogger("pylendar")
+
 
 XDG_CONFIG_HOME = Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config"))
 DEFAULT_CALENDAR_PATHS: list[Path | str] = [
@@ -91,13 +93,16 @@ def cli():
     calendar_path = (
         Path(args.file) if args.file else find_user_calendar(DEFAULT_CALENDAR_PATHS)
     )
+    if not calendar_path.is_file():
+        log.debug(f"Calendar file '{calendar_path}' not found, exiting...")
+        return
     processor = SimpleCPP(include_dirs=DEFAULT_CALENDAR_PATHS)
     try:
         calendar_lines = processor.process_file(calendar_path)
     except OSError as e:
         sys.exit(f"Error: Could not read calendar file: {e}")
 
-    ahead, behind = get_ahead_behind(args, args.today)
+    ahead, behind = get_ahead_behind(args.today, ahead=args.A, behind=args.B)
     dates_to_check = get_dates_to_check(args.today, ahead=ahead, behind=behind)
 
     # Parse special dates and aliases once
@@ -112,8 +117,18 @@ def cli():
     log.debug(f"dates_to_check = {dates_to_check}")
     log.debug(f"special_dates = {special_dates}")
 
-    for line in calendar_lines:
-        print_for_matching_dates(line, dates_to_check, date_parser)
+    # Collect calendar events matching any of the current dates
+    matching_events = [
+        event
+        for line in calendar_lines
+        if (event := get_matching_event(line, dates_to_check, date_parser))
+    ]
+
+    # Sort events by date and print them
+    for event in sorted(matching_events):
+        print(event)
+
+    return
 
 
 def setup_logging():
@@ -123,6 +138,29 @@ def setup_logging():
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+
+
+@dataclass
+class Event:
+    """Represents a calendar event with date and description."""
+
+    date: datetime.date
+    description: str
+
+    def __post_init__(self):
+        """Clean up the description by stripping whitespace."""
+        self.description = self.description.strip()
+
+    def __lt__(self, other):
+        """Enable sorting events by date."""
+        if not isinstance(other, Event):
+            return NotImplemented
+        return self.date < other.date
+
+    def __str__(self) -> str:
+        """Format the event for display output."""
+        formatted_date = f"{self.date:%b} {self.date.day:2}"
+        return f"{formatted_date}\t{self.description}"
 
 
 class DateStringParser:
@@ -394,30 +432,42 @@ def read_calendar_lines(file_path):
         raise OSError(msg) from None
 
 
-def get_ahead_behind(args, today):
-    """Determine the number of days to look ahead and behind based on the arguments."""
+def get_ahead_behind(today, ahead=None, behind=0):
+    """Determine the number of days to look ahead and behind based on the arguments.
+
+    Args:
+        today: The current date
+        ahead: Number of days ahead to look (None for default behavior)
+        behind: Number of days behind to look (default: 0)
+
+    Returns:
+        tuple: (ahead_days, behind_days)
+    """
     friday = 4  # Friday is the 4th day of the week (0=Monday, 6=Sunday)
     weekday = today.weekday()
-    ahead = args.A if args.A is not None else 3 if weekday == friday else 1
-    behind = args.B
-    return ahead, behind
+    ahead_days = ahead if ahead is not None else 3 if weekday == friday else 1
+    behind_days = behind
+    return ahead_days, behind_days
 
 
-def print_for_matching_dates(line, dates_to_check, parser):
-    """Print the event line if it matches any of the dates to check.
+def get_matching_event(line, dates_to_check, parser):
+    """Get the event from this line if it matches any of the target dates.
 
-    Use the provided parser to parse datetime strings.
+    Returns an Event object if the event matches any of the
+    dates to check, or None if there's no match.
     """
     if not line.strip():
-        return
+        return None
 
     # Events are separated by a tab character
     if "\t" not in line:
-        return
+        return None
+
     date_str, event_description = line.split("\t", 1)
     parsed_month, parsed_day = parser.parse(date_str)
     if parsed_day is None:
-        return
+        return None
+
     for check_date in dates_to_check:
         # Check for wildcard month match (e.g., "* 15")
         is_wildcard_match = parsed_month is None and parsed_day == check_date.day
@@ -434,9 +484,10 @@ def print_for_matching_dates(line, dates_to_check, parser):
                 year_val = int(match.group(1))
                 age = check_date.year - year_val
                 desc = re.sub(r"\[(\d{4})\]", str(age), event_description)
-            formatted_date = f"{check_date:%b} {check_date.day:2}"
-            print(f"{formatted_date}\t{desc.strip()}")
-            break
+
+            return Event(check_date, desc)
+
+    return None
 
 
 def find_user_calendar(look_in: list[str | Path]) -> Path:
