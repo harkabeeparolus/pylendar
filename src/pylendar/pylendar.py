@@ -93,6 +93,9 @@ def cli():
     calendar_path = (
         Path(args.file) if args.file else find_user_calendar(DEFAULT_CALENDAR_PATHS)
     )
+    if not calendar_path.is_file():
+        log.debug(f"Calendar file '{calendar_path}' not found, exiting...")
+        return
     processor = SimpleCPP(include_dirs=DEFAULT_CALENDAR_PATHS)
     try:
         calendar_lines = processor.process_file(calendar_path)
@@ -124,6 +127,8 @@ def cli():
     # Sort events by date and print them
     for event in sorted(matching_events):
         print(event)
+
+    return
 
 
 def setup_logging():
@@ -483,42 +488,6 @@ def get_matching_event(line, dates_to_check, parser):
             return Event(check_date, desc)
 
     return None
-
-
-def print_for_matching_dates(line, dates_to_check, parser):
-    """Print the event line if it matches any of the dates to check.
-
-    Use the provided parser to parse datetime strings.
-    """
-    if not line.strip():
-        return
-
-    # Events are separated by a tab character
-    if "\t" not in line:
-        return
-    date_str, event_description = line.split("\t", 1)
-    parsed_month, parsed_day = parser.parse(date_str)
-    if parsed_day is None:
-        return
-    for check_date in dates_to_check:
-        # Check for wildcard month match (e.g., "* 15")
-        is_wildcard_match = parsed_month is None and parsed_day == check_date.day
-
-        # Check for specific month and day match
-        is_full_date_match = (
-            parsed_month == check_date.month and parsed_day == check_date.day
-        )
-        if is_wildcard_match or is_full_date_match:
-            desc = event_description
-
-            # Replace [YYYY] with age if present
-            if match := re.search(r"\[(\d{4})\]", event_description):
-                year_val = int(match.group(1))
-                age = check_date.year - year_val
-                desc = re.sub(r"\[(\d{4})\]", str(age), event_description)
-            formatted_date = f"{check_date:%b} {check_date.day:2}"
-            print(f"{formatted_date}\t{desc.strip()}")
-            break
 
 
 def find_user_calendar(look_in: list[str | Path]) -> Path:
