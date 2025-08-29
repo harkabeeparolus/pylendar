@@ -112,8 +112,20 @@ def cli():
     log.debug(f"dates_to_check = {dates_to_check}")
     log.debug(f"special_dates = {special_dates}")
 
-    for line in calendar_lines:
-        print_for_matching_dates(line, dates_to_check, date_parser)
+    # Collect all matching events first, then sort by date before printing
+    matching_events = [
+        event
+        for line in calendar_lines
+        if (event := get_matching_event(line, dates_to_check, date_parser))
+    ]
+
+    # Sort events by date
+    matching_events.sort(key=lambda event: event[0])  # Sort by date
+
+    # Print sorted events
+    for event_date, event_description in matching_events:
+        formatted_date = f"{event_date:%b} {event_date.day:2}"
+        print(f"{formatted_date}\t{event_description.strip()}")
 
 
 def setup_logging():
@@ -401,6 +413,46 @@ def get_ahead_behind(args, today):
     ahead = args.A if args.A is not None else 3 if weekday == friday else 1
     behind = args.B
     return ahead, behind
+
+
+def get_matching_event(line, dates_to_check, parser):
+    """Get the event from this line if it matches any of the target dates.
+
+    Returns a (date, event_description) tuple if the event matches any of the
+    dates to check, or None if there's no match.
+    """
+    if not line.strip():
+        return None
+
+    # Events are separated by a tab character
+    if "\t" not in line:
+        return None
+
+    date_str, event_description = line.split("\t", 1)
+    parsed_month, parsed_day = parser.parse(date_str)
+    if parsed_day is None:
+        return None
+
+    for check_date in dates_to_check:
+        # Check for wildcard month match (e.g., "* 15")
+        is_wildcard_match = parsed_month is None and parsed_day == check_date.day
+
+        # Check for specific month and day match
+        is_full_date_match = (
+            parsed_month == check_date.month and parsed_day == check_date.day
+        )
+        if is_wildcard_match or is_full_date_match:
+            desc = event_description
+
+            # Replace [YYYY] with age if present
+            if match := re.search(r"\[(\d{4})\]", event_description):
+                year_val = int(match.group(1))
+                age = check_date.year - year_val
+                desc = re.sub(r"\[(\d{4})\]", str(age), event_description)
+
+            return (check_date, desc)
+
+    return None
 
 
 def print_for_matching_dates(line, dates_to_check, parser):
