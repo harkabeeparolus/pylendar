@@ -99,7 +99,7 @@ def cli():
     except OSError as e:
         sys.exit(f"Error: Could not read calendar file: {e}")
 
-    ahead, behind = get_ahead_behind(args, args.today)
+    ahead, behind = get_ahead_behind(args.today, ahead=args.A, behind=args.B)
     dates_to_check = get_dates_to_check(args.today, ahead=ahead, behind=behind)
 
     # Parse special dates and aliases once
@@ -427,13 +427,22 @@ def read_calendar_lines(file_path):
         raise OSError(msg) from None
 
 
-def get_ahead_behind(args, today):
-    """Determine the number of days to look ahead and behind based on the arguments."""
+def get_ahead_behind(today, ahead=None, behind=0):
+    """Determine the number of days to look ahead and behind based on the arguments.
+
+    Args:
+        today: The current date
+        ahead: Number of days ahead to look (None for default behavior)
+        behind: Number of days behind to look (default: 0)
+
+    Returns:
+        tuple: (ahead_days, behind_days)
+    """
     friday = 4  # Friday is the 4th day of the week (0=Monday, 6=Sunday)
     weekday = today.weekday()
-    ahead = args.A if args.A is not None else 3 if weekday == friday else 1
-    behind = args.B
-    return ahead, behind
+    ahead_days = ahead if ahead is not None else 3 if weekday == friday else 1
+    behind_days = behind
+    return ahead_days, behind_days
 
 
 def get_matching_event(line, dates_to_check, parser):
