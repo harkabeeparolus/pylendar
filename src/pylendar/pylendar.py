@@ -62,7 +62,7 @@ log = logging.getLogger("pylendar")
 
 
 XDG_CONFIG_HOME = Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config"))
-DEFAULT_CALENDAR_PATHS: list[Path | str] = [
+DEFAULT_CALENDAR_PATHS: list[Path] = [
     Path.home() / ".calendar",
     XDG_CONFIG_HOME / "calendar",
     Path("/etc/calendar"),
@@ -70,8 +70,10 @@ DEFAULT_CALENDAR_PATHS: list[Path | str] = [
     Path("/usr/local/share/calendar"),
 ]
 
+SpecialDates = dict[str, datetime.date]
 
-def main():
+
+def main() -> None:
     """Run the calendar utility."""
     setup_logging()
     try:
@@ -80,7 +82,7 @@ def main():
         sys.exit("Interrupted by user.")
 
 
-def cli():
+def cli() -> None:
     """Command-line interface for the calendar utility."""
     parser = build_parser()
     args = parser.parse_args()
@@ -91,7 +93,9 @@ def cli():
 
     calendar_lines = []
     calendar_path = (
-        Path(args.file) if args.file else find_user_calendar(DEFAULT_CALENDAR_PATHS)
+        Path(args.file)
+        if args.file
+        else find_calendar_and_chdir(DEFAULT_CALENDAR_PATHS)
     )
     if not calendar_path.is_file():
         log.debug(f"Calendar file '{calendar_path}' not found, exiting...")
@@ -127,8 +131,6 @@ def cli():
     # Sort events by date and print them
     for event in sorted(matching_events):
         print(event)
-
-    return
 
 
 def setup_logging():
@@ -168,7 +170,7 @@ class DateStringParser:
 
     month_map: dict[str, int]
 
-    def __init__(self, special_dates=None):
+    def __init__(self, special_dates: SpecialDates | None = None) -> None:
         """Initialize the parser with optional special dates."""
         self.special_dates = special_dates or {}
         self.month_map = self.build_month_map()
@@ -253,7 +255,7 @@ class SimpleCPP:
         abs_path = path.resolve()
         if abs_path in self.included_files:
             log.debug(f"Skipping {abs_path.name}: already included")
-            return [""]
+            return []
         log.debug(f"Processing {abs_path.name}")
         self.included_files.add(abs_path)
 
@@ -302,7 +304,7 @@ class SimpleCPP:
         return None
 
 
-def parse_special_dates(calendar_lines, year):
+def parse_special_dates(calendar_lines: list[str], year: int) -> SpecialDates:
     """Parse special date definitions and aliases from the calendar file."""
     # Start with known special dates
     special_dates = {"easter": dateutil.easter.easter(year)}
@@ -408,30 +410,6 @@ def build_parser():
     return parser
 
 
-def read_calendar_lines(file_path):
-    """Read the calendar file and return its lines.
-
-    Args:
-        file_path (str): The path to the calendar file.
-
-    Returns:
-        list[str]: The lines of the calendar file.
-
-    Raises:
-        FileNotFoundError: If the calendar file does not exist.
-        OSError: If there is an error reading the file.
-
-    """
-    try:
-        return Path(file_path).read_text(encoding="utf-8").splitlines()
-    except FileNotFoundError:
-        msg = f"Calendar file not found at '{file_path}'"
-        raise FileNotFoundError(msg) from None
-    except OSError as e:
-        msg = f"Could not read file '{file_path}': {e}"
-        raise OSError(msg) from None
-
-
 def get_ahead_behind(today, ahead=None, behind=0):
     """Determine the number of days to look ahead and behind based on the arguments.
 
@@ -442,6 +420,7 @@ def get_ahead_behind(today, ahead=None, behind=0):
 
     Returns:
         tuple: (ahead_days, behind_days)
+
     """
     friday = 4  # Friday is the 4th day of the week (0=Monday, 6=Sunday)
     weekday = today.weekday()
@@ -450,7 +429,9 @@ def get_ahead_behind(today, ahead=None, behind=0):
     return ahead_days, behind_days
 
 
-def get_matching_event(line, dates_to_check, parser):
+def get_matching_event(
+    line: str, dates_to_check: set[datetime.date], parser: DateStringParser
+) -> Event | None:
     """Get the event from this line if it matches any of the target dates.
 
     Returns an Event object if the event matches any of the
@@ -490,8 +471,11 @@ def get_matching_event(line, dates_to_check, parser):
     return None
 
 
-def find_user_calendar(look_in: list[str | Path]) -> Path:
-    """Resolve the calendar file path according to BSD calendar rules."""
+def find_calendar_and_chdir(look_in: list[str | Path]) -> Path:
+    """Resolve the calendar file path and chdir to its directory.
+
+    Changes working directory so that relative #include paths resolve correctly.
+    """
     dirs = [Path.cwd(), *look_in]
     if (my_dir := (Path.home() / ".calendar").resolve()).is_dir():
         os.chdir(my_dir)

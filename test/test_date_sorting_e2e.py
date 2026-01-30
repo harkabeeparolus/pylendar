@@ -28,6 +28,7 @@ def _test_calendar_sorting(tmp_path, calendar_content, today, ahead=None, behind
 
     Returns:
         list[str]: sorted events output, one event per list item
+
     """
     calendar_file = tmp_path / "calendar"
     calendar_file.write_text(calendar_content)
@@ -36,8 +37,8 @@ def _test_calendar_sorting(tmp_path, calendar_content, today, ahead=None, behind
     processor = SimpleCPP(include_dirs=[])
     calendar_lines = processor.process_file(calendar_file)
 
-    # Get ahead/behind values using the same logic as the main application
-    # Use 0 as default for behind if not specified, None for ahead to get default behavior
+    # Get ahead/behind values using the same logic as the main application.
+    # Use 0 as default for behind if not specified.
     behind_value = behind if behind is not None else 0
     ahead_days, behind_days = get_ahead_behind(today, ahead=ahead, behind=behind_value)
 
@@ -142,7 +143,7 @@ def test_default_date_range_sorting(tmp_path):
 
 
 def test_weekend_date_range_sorting(tmp_path):
-    """Test sorting with weekend behavior (Friday uses get_ahead_behind default of 3)."""
+    """Test sorting with weekend behavior (Friday default of 3 days ahead)."""
     calendar_content = """# Weekend calendar events
 07/12\tFriday event
 07/13\tSaturday event
@@ -169,10 +170,10 @@ def test_weekend_date_range_sorting(tmp_path):
 
 
 def test_friday_vs_weekday_default_behavior(tmp_path):
-    """Test that Friday and weekday use different default ahead values via get_ahead_behind."""
+    """Test that Friday and weekday use different default ahead values."""
     calendar_content = """# Events to test default behavior differences
 07/10\tWednesday event
-07/11\tThursday event  
+07/11\tThursday event
 07/12\tFriday event
 07/13\tSaturday event
 07/14\tSunday event

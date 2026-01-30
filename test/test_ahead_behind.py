@@ -1,3 +1,5 @@
+"""Tests for the get_ahead_behind function."""
+
 import datetime
 
 from pylendar.pylendar import get_ahead_behind
