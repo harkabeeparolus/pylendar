@@ -105,6 +105,7 @@ def cli() -> None:
         calendar_lines = processor.process_file(calendar_path)
     except OSError as e:
         sys.exit(f"Error: Could not read calendar file: {e}")
+    calendar_lines = join_continuation_lines(calendar_lines)
 
     ahead, behind = get_ahead_behind(args.today, ahead=args.A, behind=args.B)
     dates_to_check = get_dates_to_check(args.today, ahead=ahead, behind=behind)
@@ -131,6 +132,22 @@ def cli() -> None:
     # Sort events by date and print them
     for event in sorted(matching_events):
         print(event)
+
+
+def join_continuation_lines(lines: list[str]) -> list[str]:
+    """Join continuation lines with their parent line.
+
+    BSD calendar files allow multi-line events where continuation lines
+    start with a tab character (no date before the tab).
+    """
+    result: list[str] = []
+    for line in lines:
+        if line.startswith("\t") and result:
+            # Continuation line - append to previous
+            result[-1] += "\n" + line
+        else:
+            result.append(line)
+    return result
 
 
 def setup_logging():

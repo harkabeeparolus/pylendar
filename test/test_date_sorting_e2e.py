@@ -12,6 +12,7 @@ from pylendar.pylendar import (
     get_ahead_behind,
     get_dates_to_check,
     get_matching_event,
+    join_continuation_lines,
     parse_special_dates,
 )
 
@@ -36,6 +37,7 @@ def _test_calendar_sorting(tmp_path, calendar_content, today, ahead=None, behind
     # Process the calendar file
     processor = SimpleCPP(include_dirs=[])
     calendar_lines = processor.process_file(calendar_file)
+    calendar_lines = join_continuation_lines(calendar_lines)
 
     # Get ahead/behind values using the same logic as the main application.
     # Use 0 as default for behind if not specified.
@@ -197,3 +199,29 @@ def test_friday_vs_weekday_default_behavior(tmp_path):
         "Jul 14\tSunday event",
     ]
     assert result_fri == expected_fri
+
+
+def test_continuation_lines(tmp_path):
+    """Test that multi-line events with continuation lines are handled correctly."""
+    calendar_content = """\
+02/02\tLou Harrison dies in Lafayette, Indiana, en route to a festival
+\tof his music at Ohio State University, 2003
+02/02\tSimple single-line event
+02/03\tThe Day The Music Died; Buddy Holly, Richie Valens, and the Big
+\tBopper are killed in a plane crash outside Mason City, Iowa, 1959
+"""
+
+    today = datetime.date(2024, 2, 2)
+    result = _test_calendar_sorting(
+        tmp_path, calendar_content, today, ahead=1, behind=0
+    )
+
+    expected = [
+        "Feb  2\tLou Harrison dies in Lafayette, Indiana, en route to a festival\n"
+        "\tof his music at Ohio State University, 2003",
+        "Feb  2\tSimple single-line event",
+        "Feb  3\tThe Day The Music Died; Buddy Holly, Richie Valens, and the Big\n"
+        "\tBopper are killed in a plane crash outside Mason City, Iowa, 1959",
+    ]
+
+    assert result == expected
