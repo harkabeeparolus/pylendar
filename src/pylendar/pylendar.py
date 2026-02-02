@@ -4,6 +4,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "python-dateutil",
+#     "astronomy-engine",
 # ]
 # ///
 
@@ -58,6 +59,11 @@ try:
 except ImportError:
     sys.exit("Error: This script requires the 'python-dateutil' package.")
 
+try:
+    import astronomy
+except ImportError:
+    sys.exit("Error: This script requires the 'astronomy-engine' package.")
+
 log = logging.getLogger("pylendar")
 
 
@@ -111,10 +117,12 @@ def cli() -> None:
     dates_to_check = get_dates_to_check(args.today, ahead=ahead, behind=behind)
 
     # Parse special dates and aliases once
-    special_dates = parse_special_dates(calendar_lines, args.today.year)
+    special_dates, recurring_events = parse_special_dates(
+        calendar_lines, args.today.year
+    )
 
     # Create a DateStringParser instance with special dates
-    date_parser = DateStringParser(special_dates)
+    date_parser = DateStringParser(special_dates, recurring_events)
 
     log.debug(f"File path = {calendar_path}")
     log.debug(f"Today is {args.today}")
@@ -187,9 +195,14 @@ class DateStringParser:
 
     month_map: dict[str, int]
 
-    def __init__(self, special_dates: SpecialDates | None = None) -> None:
-        """Initialize the parser with optional special dates."""
+    def __init__(
+        self,
+        special_dates: SpecialDates | None = None,
+        recurring_events: dict[str, set[datetime.date]] | None = None,
+    ) -> None:
+        """Initialize the parser with optional special dates and recurring events."""
         self.special_dates = special_dates or {}
+        self.recurring_events = recurring_events or {}
         self.month_map = self.build_month_map()
 
         # Ensure we have month names in US English locale
@@ -321,10 +334,78 @@ class SimpleCPP:
         return None
 
 
-def parse_special_dates(calendar_lines: list[str], year: int) -> SpecialDates:
-    """Parse special date definitions and aliases from the calendar file."""
+def get_seasons(year: int) -> SpecialDates:
+    """Get the dates of equinoxes and solstices for a given year.
+
+    Returns:
+        dict mapping season names to their dates
+
+    """
+    seasons = astronomy.Seasons(year)
+    return {
+        "marequinox": seasons.mar_equinox.Utc().date(),
+        "junsolstice": seasons.jun_solstice.Utc().date(),
+        "sepequinox": seasons.sep_equinox.Utc().date(),
+        "decsolstice": seasons.dec_solstice.Utc().date(),
+    }
+
+
+def get_moon_phases(year: int) -> dict[str, set[datetime.date]]:
+    """Get all new and full moon dates for a given year.
+
+    Returns:
+        dict mapping "newmoon" and "fullmoon" to sets of dates
+
+    """
+    moon_phases: dict[str, set[datetime.date]] = {"newmoon": set(), "fullmoon": set()}
+
+    # Find all new moons (phase = 0°) in the year
+    start_time = astronomy.Time.Make(year, 1, 1, 0, 0, 0)
+    search_time = start_time
+    while True:
+        moon_phase = astronomy.SearchMoonPhase(0, search_time, 40)
+        if moon_phase is None:
+            break
+        phase_date = moon_phase.Utc().date()
+        if phase_date.year != year:
+            break
+        moon_phases["newmoon"].add(phase_date)
+        search_time = astronomy.Time.AddDays(moon_phase, 1)
+
+    # Find all full moons (phase = 180°) in the year
+    search_time = start_time
+    while True:
+        moon_phase = astronomy.SearchMoonPhase(180, search_time, 40)
+        if moon_phase is None:
+            break
+        phase_date = moon_phase.Utc().date()
+        if phase_date.year != year:
+            break
+        moon_phases["fullmoon"].add(phase_date)
+        search_time = astronomy.Time.AddDays(moon_phase, 1)
+
+    return moon_phases
+
+
+def parse_special_dates(
+    calendar_lines: list[str], year: int
+) -> tuple[SpecialDates, dict[str, set[datetime.date]]]:
+    """Parse special date definitions and aliases from the calendar file.
+
+    Returns:
+        tuple of (special_dates, recurring_events)
+        - special_dates: dict of single-occurrence dates (Easter, seasons)
+        - recurring_events: dict of multiple-occurrence dates (moon phases)
+
+    """
     # Start with known special dates
     special_dates = {"easter": dateutil.easter.easter(year)}
+
+    # Add astronomical dates
+    special_dates.update(get_seasons(year))
+    recurring_events = get_moon_phases(year)
+
+    # Parse aliases from calendar file
     for line in calendar_lines:
         if "=" in line and "\t" not in line:
             left, right = line.split("=", 1)
@@ -335,7 +416,8 @@ def parse_special_dates(calendar_lines: list[str], year: int) -> SpecialDates:
                 special_dates[right] = special_dates[left]
             elif right in special_dates:
                 special_dates[left] = special_dates[right]
-    return special_dates
+
+    return special_dates, recurring_events
 
 
 def parse_today_arg(t_str):
@@ -446,6 +528,24 @@ def get_ahead_behind(today, ahead=None, behind=0):
     return ahead_days, behind_days
 
 
+def replace_age_in_description(description: str, check_date: datetime.date) -> str:
+    """Replace [YYYY] with calculated age in event description.
+
+    Args:
+        description: Event description that may contain [YYYY] placeholder
+        check_date: Date to calculate age from
+
+    Returns:
+        Description with [YYYY] replaced by age, or original if no placeholder
+
+    """
+    if match := re.search(r"\[(\d{4})\]", description):
+        year_val = int(match.group(1))
+        age = check_date.year - year_val
+        return re.sub(r"\[(\d{4})\]", str(age), description)
+    return description
+
+
 def get_matching_event(
     line: str, dates_to_check: set[datetime.date], parser: DateStringParser
 ) -> Event | None:
@@ -454,14 +554,22 @@ def get_matching_event(
     Returns an Event object if the event matches any of the
     dates to check, or None if there's no match.
     """
-    if not line.strip():
-        return None
-
-    # Events are separated by a tab character
-    if "\t" not in line:
+    # Validate line has content and tab separator
+    if not line.strip() or "\t" not in line:
         return None
 
     date_str, event_description = line.split("\t", 1)
+    date_str_lower = date_str.strip().lower()
+
+    # Check recurring events (moon phases) first
+    if date_str_lower in parser.recurring_events:
+        for check_date in dates_to_check:
+            if check_date in parser.recurring_events[date_str_lower]:
+                desc = replace_age_in_description(event_description, check_date)
+                return Event(check_date, desc)
+        return None
+
+    # Normal date parsing for special dates and regular dates
     parsed_month, parsed_day = parser.parse(date_str)
     if parsed_day is None:
         return None
@@ -475,14 +583,7 @@ def get_matching_event(
             parsed_month == check_date.month and parsed_day == check_date.day
         )
         if is_wildcard_match or is_full_date_match:
-            desc = event_description
-
-            # Replace [YYYY] with age if present
-            if match := re.search(r"\[(\d{4})\]", event_description):
-                year_val = int(match.group(1))
-                age = check_date.year - year_val
-                desc = re.sub(r"\[(\d{4})\]", str(age), event_description)
-
+            desc = replace_age_in_description(event_description, check_date)
             return Event(check_date, desc)
 
     return None

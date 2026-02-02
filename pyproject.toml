@@ -8,7 +8,10 @@ authors = [
     { name = "Fredrik Mellström", email = "11281108+harkabeeparolus@users.noreply.github.com" },
 ]
 requires-python = ">=3.11"
-dependencies = ["python-dateutil>=2.9.0.post0"]
+dependencies = [
+    "astronomy-engine>=2.1.19",
+    "python-dateutil>=2.9.0.post0",
+]
 
 [project.scripts]
 pylendar = "pylendar:main"

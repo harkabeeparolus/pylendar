@@ -48,8 +48,8 @@ def _test_calendar_sorting(tmp_path, calendar_content, today, ahead=None, behind
     dates_to_check = get_dates_to_check(today, ahead=ahead_days, behind=behind_days)
 
     # Parse special dates and create parser
-    special_dates = parse_special_dates(calendar_lines, today.year)
-    date_parser = DateStringParser(special_dates)
+    special_dates, recurring_events = parse_special_dates(calendar_lines, today.year)
+    date_parser = DateStringParser(special_dates, recurring_events)
 
     # Collect matching events
     matching_events = [
@@ -224,4 +224,53 @@ def test_continuation_lines(tmp_path):
         "\tBopper are killed in a plane crash outside Mason City, Iowa, 1959",
     ]
 
+    assert result == expected
+
+
+def test_astronomical_seasons(tmp_path):
+    """Test that astronomical season dates work correctly."""
+    calendar_content = """# Astronomical seasons
+MarEquinox	Spring begins
+JunSolstice	Summer begins - longest day of the year
+SepEquinox	Fall begins
+DecSolstice	Winter begins - shortest day of the year
+"""
+
+    # Test around spring equinox 2026 (March 20)
+    today = datetime.date(2026, 3, 20)
+    result = _test_calendar_sorting(
+        tmp_path, calendar_content, today, ahead=1, behind=0
+    )
+
+    expected = ["Mar 20\tSpring begins"]
+    assert result == expected
+
+    # Test around winter solstice 2026 (December 21)
+    today = datetime.date(2026, 12, 20)
+    result = _test_calendar_sorting(
+        tmp_path, calendar_content, today, ahead=2, behind=0
+    )
+
+    expected = ["Dec 21\tWinter begins - shortest day of the year"]
+    assert result == expected
+
+
+def test_astronomical_moon_phases(tmp_path):
+    """Test that moon phase dates work correctly."""
+    calendar_content = """# Moon phases
+NewMoon	New moon - time for reflection
+FullMoon	Full moon party tonight!
+"""
+
+    # Test around January 2026 moon phases
+    # New moon on Jan 18, Full moon on Jan 3
+    today = datetime.date(2026, 1, 1)
+    result = _test_calendar_sorting(
+        tmp_path, calendar_content, today, ahead=20, behind=0
+    )
+
+    expected = [
+        "Jan  3\tFull moon party tonight!",
+        "Jan 18\tNew moon - time for reflection",
+    ]
     assert result == expected

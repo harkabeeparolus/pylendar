@@ -3,5 +3,14 @@
         "test"
     ],
     "python.testing.unittestEnabled": false,
-    "python.testing.pytestEnabled": true
+    "python.testing.pytestEnabled": true,
+    "cSpell.words": [
+        "decsolstice",
+        "fullmoon",
+        "junsolstice",
+        "marequinox",
+        "newmoon",
+        "pylendar",
+        "sepequinox"
+    ]
 }
