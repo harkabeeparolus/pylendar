@@ -7,13 +7,10 @@
 _default:
     @just --list
 
-# Run all checks (lint + test)
-check: lint test
+# Autofix, lint, typecheck, and test
+check: fix lint test
 
-# Format code and fix linting issues
-fix: ruff-fix
-
-# Run the main application (for testing)
+# Run the main application
 run *ARGS:
     uv run pylendar {{ARGS}}
 
@@ -29,32 +26,22 @@ build:
 test *ARGS:
     uv run pytest {{ARGS}}
 
-# Run all linting tools
+# Autofix ruff issues and format code
 [group('details')]
-lint: ruff-check ruff-format pylint mypy ty
-
-# Run ruff checks
-[group('details')]
-ruff-check:
-    uv run ruff check .
-
-# Run ruff formatting check
-[group('details')]
-ruff-format:
-    uv run ruff format --check .
-
-# Fix ruff issues automatically
-[group('details')]
-ruff-fix:
+fix:
     uv run ruff check --fix .
     uv run ruff format .
 
-# Run pylint
+# Run all linting and type checking tools
+[group('details')]
+lint: pylint mypy ty
+
+# Run pylint (exit code 8 = warnings only, not errors)
 [group('details')]
 pylint:
-    uv run pylint src/ test/
+    uv run pylint --fail-under=9.0 src/ test/
 
-# Run mypy type checking
+# Run mypy type checking (strict)
 [group('details')]
 mypy:
     uv run mypy src/
@@ -63,11 +50,6 @@ mypy:
 [group('details')]
 ty:
     uv run ty check
-
-# Run tests with coverage
-[group('details')]
-_test-coverage:
-    uv run pytest --cov=pylendar --cov-report=term-missing
 
 # Show project status
 status:

@@ -7,6 +7,8 @@ without creating test files in the current directory.
 
 import datetime
 
+import pytest
+
 from pylendar.pylendar import (
     DateStringParser,
     SimpleCPP,
@@ -18,56 +20,39 @@ from pylendar.pylendar import (
 )
 
 
-def _test_calendar_sorting(tmp_path, calendar_content, today, ahead=None, behind=None):
-    """Provide helper functionality for testing calendar event sorting.
+@pytest.fixture
+def run_calendar(tmp_path):
+    """Fixture that processes calendar content and returns sorted event strings."""
 
-    Args:
-        tmp_path: pytest temporary path fixture
-        calendar_content: string content for the calendar file
-        today: datetime.date for the test date
-        ahead: number of days ahead to check (None for default behavior)
-        behind: number of days behind to check (None for default behavior)
-
-    Returns:
-        list[str]: sorted events output, one event per list item
-
-    """
-    calendar_file = tmp_path / "calendar"
-    calendar_file.write_text(calendar_content)
-
-    # Process the calendar file
-    processor = SimpleCPP(include_dirs=[])
-    calendar_lines = processor.process_file(calendar_file)
-    calendar_lines = join_continuation_lines(calendar_lines)
-
-    # Get ahead/behind values using the same logic as the main application.
-    # Use 0 as default for behind if not specified.
-    behind_value = behind if behind is not None else 0
-    ahead_days, behind_days = get_ahead_behind(today, ahead=ahead, behind=behind_value)
-
-    # Get dates to check
-    dates_to_check = get_dates_to_check(today, ahead=ahead_days, behind=behind_days)
-
-    # Parse special dates and create parser
-    special_dates, recurring_events = parse_special_dates(calendar_lines, today.year)
-    date_parser = DateStringParser(special_dates)
-
-    # Collect matching events
-    matching_events = [
-        event
-        for line in calendar_lines
-        if (
-            event := get_matching_event(
-                line, dates_to_check, date_parser, recurring_events
-            )
+    def _run(calendar_content, today, ahead=None, behind=0):
+        calendar_file = tmp_path / "calendar"
+        calendar_file.write_text(calendar_content)
+        calendar_lines = join_continuation_lines(
+            SimpleCPP(include_dirs=[]).process_file(calendar_file)
         )
-    ]
 
-    # Sort events and return result list
-    return [str(event) for event in sorted(matching_events)]
+        ahead_days, behind_days = get_ahead_behind(today, ahead=ahead, behind=behind)
+        dates_to_check = get_dates_to_check(today, ahead=ahead_days, behind=behind_days)
+
+        special_dates, recurring_events = parse_special_dates(
+            calendar_lines, today.year
+        )
+        date_parser = DateStringParser(special_dates)
+        matching_events = [
+            event
+            for line in calendar_lines
+            if (
+                event := get_matching_event(
+                    line, dates_to_check, date_parser, recurring_events
+                )
+            )
+        ]
+        return [str(event) for event in sorted(matching_events)]
+
+    return _run
 
 
-def test_events_sorted_by_date(tmp_path):
+def test_events_sorted_by_date(run_calendar):
     """Test that events from a calendar file are sorted by date."""
     calendar_content = """# Test calendar with mixed dates
 07/06\tEvent on Saturday July 6th
@@ -82,9 +67,7 @@ def test_events_sorted_by_date(tmp_path):
     # Test on July 5th (Friday) with ahead=3, behind=2
     # This will check July 3-8, covering our events
     today = datetime.date(2024, 7, 5)
-    result = _test_calendar_sorting(
-        tmp_path, calendar_content, today, ahead=3, behind=2
-    )
+    result = run_calendar(calendar_content, today, ahead=3, behind=2)
 
     # Expected result should be events in chronological order
     expected = [
@@ -97,7 +80,7 @@ def test_events_sorted_by_date(tmp_path):
     assert result == expected
 
 
-def test_events_with_wildcards_sorted_correctly(tmp_path):
+def test_events_with_wildcards_sorted_correctly(run_calendar):
     """Test that wildcard events (* DD) are sorted correctly with regular dates."""
     calendar_content = """# Mix of wildcards and specific dates
 * 20\tPay credit card
@@ -110,9 +93,7 @@ def test_events_with_wildcards_sorted_correctly(tmp_path):
 
     # Test on July 15th with ahead=7, behind=7 to catch all our events
     today = datetime.date(2024, 7, 15)
-    result = _test_calendar_sorting(
-        tmp_path, calendar_content, today, ahead=7, behind=7
-    )
+    result = run_calendar(calendar_content, today, ahead=7, behind=7)
 
     # Should be sorted chronologically regardless of wildcard vs specific date
     expected = [
@@ -126,7 +107,7 @@ def test_events_with_wildcards_sorted_correctly(tmp_path):
     assert result == expected
 
 
-def test_default_date_range_sorting(tmp_path):
+def test_default_date_range_sorting(run_calendar):
     """Test sorting with default date range (uses get_ahead_behind logic)."""
     calendar_content = """# Calendar with today and tomorrow events
 08/29\tToday's event
@@ -138,7 +119,7 @@ def test_default_date_range_sorting(tmp_path):
     # Test with default parameters - should use get_ahead_behind() logic
     # Thursday (Aug 29, 2024) should default to ahead=1, behind=0
     today = datetime.date(2024, 8, 29)  # Thursday
-    result = _test_calendar_sorting(tmp_path, calendar_content, today)  # Uses defaults
+    result = run_calendar(calendar_content, today)  # Uses defaults
 
     # Should only show today (Aug 29) and tomorrow (Aug 30)
     expected = [
@@ -149,7 +130,7 @@ def test_default_date_range_sorting(tmp_path):
     assert result == expected
 
 
-def test_weekend_date_range_sorting(tmp_path):
+def test_weekend_date_range_sorting(run_calendar):
     """Test sorting with weekend behavior (Friday default of 3 days ahead)."""
     calendar_content = """# Weekend calendar events
 07/12\tFriday event
@@ -161,9 +142,7 @@ def test_weekend_date_range_sorting(tmp_path):
 
     # Test on Friday - should use get_ahead_behind() default of 3 days ahead
     today = datetime.date(2024, 7, 12)  # Friday
-    result = _test_calendar_sorting(
-        tmp_path, calendar_content, today
-    )  # Uses Friday default
+    result = run_calendar(calendar_content, today)  # Uses Friday default
 
     # Should show Fri-Mon events in chronological order (Friday default: ahead=3)
     expected = [
@@ -176,7 +155,7 @@ def test_weekend_date_range_sorting(tmp_path):
     assert result == expected
 
 
-def test_friday_vs_weekday_default_behavior(tmp_path):
+def test_friday_vs_weekday_default_behavior(run_calendar):
     """Test that Friday and weekday use different default ahead values."""
     calendar_content = """# Events to test default behavior differences
 07/10\tWednesday event
@@ -188,7 +167,7 @@ def test_friday_vs_weekday_default_behavior(tmp_path):
 
     # Test on Wednesday (weekday) - should default to ahead=1, behind=0
     wednesday = datetime.date(2024, 7, 10)
-    result_wed = _test_calendar_sorting(tmp_path, calendar_content, wednesday)
+    result_wed = run_calendar(calendar_content, wednesday)
     expected_wed = [
         "Jul 10\tWednesday event",
         "Jul 11\tThursday event",
@@ -197,7 +176,7 @@ def test_friday_vs_weekday_default_behavior(tmp_path):
 
     # Test on Friday - should default to ahead=3, behind=0
     friday = datetime.date(2024, 7, 12)
-    result_fri = _test_calendar_sorting(tmp_path, calendar_content, friday)
+    result_fri = run_calendar(calendar_content, friday)
     expected_fri = [
         "Jul 12\tFriday event",
         "Jul 13\tSaturday event",
@@ -206,7 +185,7 @@ def test_friday_vs_weekday_default_behavior(tmp_path):
     assert result_fri == expected_fri
 
 
-def test_continuation_lines(tmp_path):
+def test_continuation_lines(run_calendar):
     """Test that multi-line events with continuation lines are handled correctly."""
     calendar_content = """\
 02/02\tLou Harrison dies in Lafayette, Indiana, en route to a festival
@@ -217,9 +196,7 @@ def test_continuation_lines(tmp_path):
 """
 
     today = datetime.date(2024, 2, 2)
-    result = _test_calendar_sorting(
-        tmp_path, calendar_content, today, ahead=1, behind=0
-    )
+    result = run_calendar(calendar_content, today, ahead=1)
 
     expected = [
         "Feb  2\tLou Harrison dies in Lafayette, Indiana, en route to a festival\n"
@@ -232,7 +209,7 @@ def test_continuation_lines(tmp_path):
     assert result == expected
 
 
-def test_astronomical_seasons(tmp_path):
+def test_astronomical_seasons(run_calendar):
     """Test that astronomical season dates work correctly."""
     calendar_content = """# Astronomical seasons
 MarEquinox	Spring begins
@@ -243,24 +220,20 @@ DecSolstice	Winter begins - shortest day of the year
 
     # Test around spring equinox 2026 (March 20)
     today = datetime.date(2026, 3, 20)
-    result = _test_calendar_sorting(
-        tmp_path, calendar_content, today, ahead=1, behind=0
-    )
+    result = run_calendar(calendar_content, today, ahead=1)
 
     expected = ["Mar 20\tSpring begins"]
     assert result == expected
 
     # Test around winter solstice 2026 (December 21)
     today = datetime.date(2026, 12, 20)
-    result = _test_calendar_sorting(
-        tmp_path, calendar_content, today, ahead=2, behind=0
-    )
+    result = run_calendar(calendar_content, today, ahead=2)
 
     expected = ["Dec 21\tWinter begins - shortest day of the year"]
     assert result == expected
 
 
-def test_astronomical_moon_phases(tmp_path):
+def test_astronomical_moon_phases(run_calendar):
     """Test that moon phase dates work correctly."""
     calendar_content = """# Moon phases
 NewMoon	New moon - time for reflection
@@ -270,9 +243,7 @@ FullMoon	Full moon party tonight!
     # Test around January 2026 moon phases
     # New moon on Jan 18, Full moon on Jan 3
     today = datetime.date(2026, 1, 1)
-    result = _test_calendar_sorting(
-        tmp_path, calendar_content, today, ahead=20, behind=0
-    )
+    result = run_calendar(calendar_content, today, ahead=20)
 
     expected = [
         "Jan  3\tFull moon party tonight!",

@@ -8,19 +8,21 @@ Pylendar is a Python port of the BSD `calendar(1)` utility. It parses calendar f
 
 ## Build and Development Commands
 
-Uses `uv` for package management and `ruff` + `pylint` for linting. Run pylint on both `src/` and `test/`.
+Uses `uv` for package management, `ruff` + `pylint` for linting, and `mypy` (strict) + `ty` for type checking. Run pylint on both `src/` and `test/`. A `Justfile` is provided for convenience (`just check` runs everything).
 
 ```bash
 uv sync                  # install to venv
 ruff check --fix         # linting
 uv run pylint src test   # linting
 ruff format              # format source code
+uv run mypy src          # type checking (strict mode)
+uv run ty check          # type checking
 uv run pylendar          # run pylendar CLI
 ```
 
 ## Architecture
 
-The codebase is intentionally a single file (`src/pylendar/pylendar.py`, ~500 lines) so it could be used as a standalone script in the future, via PEP 723 inline script metadata. But during development we build it as a normal Python package.
+The codebase is intentionally a single file (`src/pylendar/pylendar.py`, ~600 lines) so it could be used as a standalone script in the future, via PEP 723 inline script metadata. But during development we build it as a normal Python package.
 
 Three main components:
 
@@ -48,6 +50,6 @@ Tests are in `test/` directory:
 - `test_ahead_behind.py` - Date range calculation with Friday special cases
 - `test_date_sorting_e2e.py` - Integration tests for event sorting with mixed date formats
 
-## Linting
+## Linting and Type Checking
 
-Ruff is configured with strict "ALL" rules. Pylint runs on both `src/` and `test/` directories. Both allow f-string interpolation in logging.
+Ruff is configured with strict "ALL" rules. Pylint runs on both `src/` and `test/` directories. Both allow f-string interpolation in logging. Mypy runs in strict mode; ty is also used. Type stubs for `astronomy-engine` are in `typings/`.

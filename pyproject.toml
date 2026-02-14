@@ -34,6 +34,10 @@ dev = [
 
 [tool.ruff.lint]
 flake8-annotations.ignore-fully-untyped = true
+per-file-ignores."typings/*.pyi" = [
+    "N802",    # Function name should be lowercase (must match upstream API)
+    "N803",    # Argument name should be lowercase (must match upstream API)
+]
 per-file-ignores."test_*.py" = [
     "S101",    # Use of assert detected (normal in tests)
     "PLR2004", # Magic value used in comparison (acceptable in tests)
@@ -51,10 +55,8 @@ ignore = [
 
 [tool.mypy]
 python_version = "3.11"
-
-[[tool.mypy.overrides]]
-module = "astronomy"
-ignore_missing_imports = true
+mypy_path = "typings"
+strict = true
 
 [tool.pylint]
 main.py-version = "3.11"
@@ -62,5 +64,9 @@ main.jobs = 0                       # 0 means all available cores
 reports.output-format = "colorized"
 
 [tool.pylint."messages control"]
-disable = ["logging-fstring-interpolation", "logging-format-interpolation"]
+disable = [
+    "logging-fstring-interpolation",
+    "logging-format-interpolation",
+    "redefined-outer-name",           # pytest fixtures use this pattern
+]
 enable = ["useless-suppression"]
