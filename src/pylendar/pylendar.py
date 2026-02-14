@@ -108,9 +108,7 @@ def cli() -> None:
 
     calendar_lines = []
     calendar_path = (
-        Path(args.file)
-        if args.file
-        else find_calendar_and_chdir(DEFAULT_CALENDAR_PATHS)
+        Path(args.file) if args.file else find_calendar(DEFAULT_CALENDAR_PATHS)
     )
     if not calendar_path.is_file():
         log.debug(f"Calendar file '{calendar_path}' not found, exiting...")
@@ -333,9 +331,12 @@ class SimpleCPP:
     def resolve_include(
         self, name: Path, look_first: Path | None = None
     ) -> Path | None:
-        """Try to find an include file.
+        """Resolve an included file by searching standard directories.
 
-        Resolve the file name against the current directory and include directories.
+        Looks in look_first (the parent directory of the file containing the
+        #include directive) before falling back to include_dirs. This mirrors C
+        preprocessor semantics — relative includes resolve from the including
+        file's location — and avoids any dependence on the process cwd.
         """
         dirs = [look_first, *self.include_dirs] if look_first else self.include_dirs
         for base_dir in dirs:
@@ -595,14 +596,18 @@ def get_matching_event(
     return None
 
 
-def find_calendar_and_chdir(look_in: Sequence[Path]) -> Path:
-    """Resolve the calendar file path and chdir to its directory.
+def find_calendar(look_in: Sequence[Path]) -> Path:
+    """Find the calendar file in standard locations.
 
-    Changes working directory so that relative #include paths resolve correctly.
+    The BSD calendar(1) utility uses chdir to the calendar directory so that
+    relative #include paths resolve correctly. We don't need that here because
+    SimpleCPP.resolve_include() already passes each file's parent directory as
+    look_first, resolving includes relative to the including file (correct C
+    preprocessor semantics) without relying on the process working directory.
     """
     dirs = [Path.cwd(), *look_in]
-    if (my_dir := (Path.home() / ".calendar").resolve()).is_dir():
-        os.chdir(my_dir)
+    my_dir = (Path.home() / ".calendar").resolve()
+    if my_dir.is_dir():
         dirs.insert(1, my_dir)
     for dir_path in dirs:
         file = dir_path / "calendar"
