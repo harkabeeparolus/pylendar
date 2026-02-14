@@ -21,10 +21,15 @@ The calendar file should have one event per line, formatted as:
     <Date><TAB><Event Description>
 
 Supported Date Formats:
-    - MM/DD       (e.g., 07/09)
-    - Month DD    (e.g., Jul 9, July 9)
-    - * DD        (e.g., * 9) - for the nth day of any month
-    - Easter      Catholic Easter
+    - MM/DD           (e.g., 07/09)
+    - Month DD        (e.g., Jul 9, July 9)
+    - * DD            (e.g., * 9) - for the nth day of any month
+    - Month Wkday+N   (e.g., May Sun+2) - Nth weekday of a month
+    - Month Wkday-N   (e.g., May Mon-1) - last Nth weekday of a month
+    - * Wkday+N       (e.g., * Fri+3) - Nth weekday of every month
+    - Easter          Catholic Easter
+    - Special+/-N     (e.g., Easter-2, FullMoon+1) - offset from special date
+    - Weekday         (e.g., Friday) - every occurrence in the year
 
 Example calendar file (save as 'calendar'):
 #------------------------------------------
@@ -140,6 +145,92 @@ class RecurringDate(DateExpr):
         return set(self.dates)
 
 
+def _find_nth_weekday(
+    year: int, month: int, weekday: int, n: int
+) -> datetime.date | None:
+    """Find the Nth occurrence of a weekday in a given month.
+
+    n > 0: count from start (1=first, 2=second, ..., 5=fifth)
+    n < 0: count from end (-1=last, -2=second-to-last)
+    Returns None if the occurrence doesn't exist (e.g. 5th Monday of Feb).
+    """
+    if n > 0:
+        first_day = datetime.date(year, month, 1)
+        days_ahead = (weekday - first_day.weekday()) % 7
+        first_occurrence = first_day + datetime.timedelta(days=days_ahead)
+        target = first_occurrence + datetime.timedelta(weeks=n - 1)
+    else:
+        last_day_num = calendar.monthrange(year, month)[1]
+        last_day = datetime.date(year, month, last_day_num)
+        days_back = (last_day.weekday() - weekday) % 7
+        last_occurrence = last_day - datetime.timedelta(days=days_back)
+        target = last_occurrence + datetime.timedelta(weeks=n + 1)
+    return target if target.month == month else None
+
+
+@dataclass(frozen=True)
+class NthWeekdayOfMonth(DateExpr):
+    """Nth weekday of a specific month (e.g., May Sun+2 for Mother's Day)."""
+
+    month: int
+    weekday: int
+    n: int
+
+    def resolve(self, year: int) -> set[datetime.date]:
+        """Return the Nth weekday of the month, or empty if it doesn't exist."""
+        result = _find_nth_weekday(year, self.month, self.weekday, self.n)
+        return {result} if result else set()
+
+
+@dataclass(frozen=True)
+class NthWeekdayEveryMonth(DateExpr):
+    """Nth weekday of every month (e.g., * Fri+3 for 3rd Friday of every month)."""
+
+    weekday: int
+    n: int
+
+    def resolve(self, year: int) -> set[datetime.date]:
+        """Return the Nth weekday for each of the 12 months."""
+        dates: set[datetime.date] = set()
+        for month in range(1, 13):
+            result = _find_nth_weekday(year, month, self.weekday, self.n)
+            if result:
+                dates.add(result)
+        return dates
+
+
+@dataclass(frozen=True)
+class OffsetDateExpr(DateExpr):
+    """A date expression offset by a number of days (e.g., Easter-2 for Good Friday)."""
+
+    base: DateExpr
+    offset: int
+
+    def resolve(self, year: int) -> set[datetime.date]:
+        """Return base dates shifted by offset days."""
+        delta = datetime.timedelta(days=self.offset)
+        return {d + delta for d in self.base.resolve(year)}
+
+
+@dataclass(frozen=True)
+class EveryWeekday(DateExpr):
+    """Every occurrence of a weekday in the year (e.g., Friday)."""
+
+    weekday: int
+
+    def resolve(self, year: int) -> set[datetime.date]:
+        """Return all occurrences of this weekday in the given year."""
+        jan1 = datetime.date(year, 1, 1)
+        days_ahead = (self.weekday - jan1.weekday()) % 7
+        first = jan1 + datetime.timedelta(days=days_ahead)
+        dates: set[datetime.date] = set()
+        current = first
+        while current.year == year:
+            dates.add(current)
+            current += datetime.timedelta(weeks=1)
+        return dates
+
+
 def main() -> None:
     """Run the calendar utility."""
     setup_logging()
@@ -251,6 +342,7 @@ class DateStringParser:
     """Parser for date strings from calendar files."""
 
     month_map: dict[str, int]
+    weekday_map: dict[str, int]
 
     def __init__(
         self,
@@ -259,10 +351,12 @@ class DateStringParser:
         """Initialize the parser with optional date expressions."""
         self.date_exprs = date_exprs or {}
         self.month_map = self.build_month_map()
+        self.weekday_map = self.build_weekday_map()
 
-        # Ensure we have month names in US English locale
+        # Ensure we have month/weekday names in US English locale
         with calendar.different_locale("C"):  # type: ignore[arg-type]
             self.month_map.update(self.build_month_map())
+            self.weekday_map.update(self.build_weekday_map())
 
     @staticmethod
     def build_month_map() -> dict[str, int]:
@@ -277,39 +371,86 @@ class DateStringParser:
             if m
         }
 
+    @staticmethod
+    def build_weekday_map() -> dict[str, int]:
+        """Build a map of weekday names and abbreviations to their numbers (Monday=0).
+
+        This uses the current locale at the time of execution.
+        """
+        return {
+            d.lower(): n
+            for s in (calendar.day_name, calendar.day_abbr)
+            for n, d in enumerate(s)
+        }
+
     def parse(self, date_str: str) -> DateExpr | None:
         """Parse a date string from the calendar file.
 
         Supports special dates, aliases, and standard date formats.
+        Pattern order matters — more specific patterns are tried first.
         """
         date_str = date_str.strip().lower()
 
-        # Handle special dates and aliases
+        # Special date with offset (e.g., Easter-2, FullMoon+1)
+        # Must precede plain special-date lookup
+        match = re.fullmatch(r"([a-z]+)([+-])(\d+)", date_str)
+        if match:
+            sign = 1 if match.group(2) == "+" else -1
+            offset = sign * int(match.group(3))
+            if base := self.date_exprs.get(match.group(1)):
+                return OffsetDateExpr(base, offset)
+
+        # Plain special dates and aliases
         if date_expr := self.date_exprs.get(date_str):
             return date_expr
 
-        # Pattern 1: MM/DD (e.g., 07/09)
-        match = re.fullmatch(r"(?P<month>\d{1,2})/(?P<day>\d{1,2})", date_str)
-        if match:
-            month = int(match.group("month"))
-            day = int(match.group("day"))
-            return FixedDate(month, day)
+        # Standalone weekday (e.g., Friday) — checked before regex
+        if date_str in self.weekday_map:
+            return EveryWeekday(self.weekday_map[date_str])
 
-        # Pattern 2: Month DD (e.g., July 9 or Jul 9)
-        match = re.fullmatch(
-            r"(?P<month_name>[a-z]{3,24})\s+(?P<day>\d{1,2})", date_str
-        )
+        return self._parse_format_patterns(date_str)
+
+    def _parse_format_patterns(self, date_str: str) -> DateExpr | None:
+        """Parse regex-based date format patterns."""
+        # MM/DD (e.g., 07/09)
+        match = re.fullmatch(r"(\d{1,2})/(\d{1,2})", date_str)
         if match:
-            month_name = match.group("month_name")
-            day = int(match.group("day"))
+            return FixedDate(int(match.group(1)), int(match.group(2)))
+
+        # Month Weekday+/-N (e.g., May Sun+2, Nov Thu+4, May Mon-1)
+        # Must precede Month DD so "May Sun+2" isn't partially matched
+        match = re.fullmatch(r"([a-z]+)\s+([a-z]+)([+-])(\d+)", date_str)
+        if match:
+            month_name, wkday_name = match.group(1), match.group(2)
+            sign = 1 if match.group(3) == "+" else -1
+            n = sign * int(match.group(4))
+            if month_name in self.month_map and wkday_name in self.weekday_map:
+                return NthWeekdayOfMonth(
+                    self.month_map[month_name],
+                    self.weekday_map[wkday_name],
+                    n,
+                )
+
+        # Month DD (e.g., July 9 or Jul 9)
+        match = re.fullmatch(r"([a-z]{3,24})\s+(\d{1,2})", date_str)
+        if match:
+            month_name = match.group(1)
             if month_name in self.month_map:
-                return FixedDate(self.month_map[month_name], day)
+                return FixedDate(self.month_map[month_name], int(match.group(2)))
 
-        # Pattern 3: * DD (e.g., * 9)
-        match = re.fullmatch(r"\*\s+(?P<day>\d{1,2})", date_str)
+        # * Weekday+/-N (e.g., * Fri+3) — must precede * DD
+        match = re.fullmatch(r"\*\s+([a-z]+)([+-])(\d+)", date_str)
         if match:
-            day = int(match.group("day"))
-            return WildcardDay(day)
+            wkday_name = match.group(1)
+            sign = 1 if match.group(2) == "+" else -1
+            n = sign * int(match.group(3))
+            if wkday_name in self.weekday_map:
+                return NthWeekdayEveryMonth(self.weekday_map[wkday_name], n)
+
+        # * DD (e.g., * 9)
+        match = re.fullmatch(r"\*\s+(\d{1,2})", date_str)
+        if match:
+            return WildcardDay(int(match.group(1)))
 
         return None
 

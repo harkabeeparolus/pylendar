@@ -249,6 +249,125 @@ FullMoon	Full moon party tonight!
     assert result == expected
 
 
+def test_nth_weekday_of_month(run_calendar):
+    """Test Nth weekday of month expressions (e.g., May Sun+2 for Mother's Day)."""
+    calendar_content = """\
+May Sun+2\tMother's Day
+Sep Mon+1\tLabor Day
+Nov Thu+4\tThanksgiving
+"""
+    # Mother's Day 2026: May 10 (2nd Sunday)
+    today = datetime.date(2026, 5, 10)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["May 10\tMother's Day"]
+
+    # Labor Day 2026: Sep 7 (1st Monday)
+    today = datetime.date(2026, 9, 7)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Sep  7\tLabor Day"]
+
+    # Thanksgiving 2026: Nov 26 (4th Thursday)
+    today = datetime.date(2026, 11, 26)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Nov 26\tThanksgiving"]
+
+
+def test_last_weekday_of_month(run_calendar):
+    """Test last weekday of month (e.g., May Mon-1 for Memorial Day)."""
+    calendar_content = """\
+May Mon-1\tMemorial Day
+"""
+    # Memorial Day 2026: May 25 (last Monday)
+    today = datetime.date(2026, 5, 25)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["May 25\tMemorial Day"]
+
+
+def test_fifth_weekday_no_match(run_calendar):
+    """Test that 5th occurrence returns no match when it doesn't exist."""
+    calendar_content = """\
+Feb Mon+5\tFifth Monday of February
+"""
+    # Feb 2026 only has 4 Mondays, so no match
+    today = datetime.date(2026, 2, 1)
+    result = run_calendar(calendar_content, today, ahead=27)
+    assert result == []
+
+
+def test_wildcard_nth_weekday(run_calendar):
+    """Test wildcard Nth weekday (e.g., * Fri+3 for 3rd Friday of every month)."""
+    calendar_content = """\
+* Fri+3\tThird Friday
+"""
+    # 3rd Friday of January 2026 is Jan 16
+    today = datetime.date(2026, 1, 16)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Jan 16\tThird Friday"]
+
+
+def test_easter_offset(run_calendar):
+    """Test Easter offset expressions (e.g., Easter-2 for Good Friday)."""
+    calendar_content = """\
+Easter-2\tGood Friday
+Easter-46\tAsh Wednesday
+"""
+    # Easter 2026 is April 5
+    # Good Friday: April 3
+    today = datetime.date(2026, 4, 3)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Apr  3\tGood Friday"]
+
+    # Ash Wednesday: Feb 18
+    today = datetime.date(2026, 2, 18)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Feb 18\tAsh Wednesday"]
+
+
+def test_recurring_date_offset(run_calendar):
+    """Test offset from recurring date (e.g., FullMoon+1)."""
+    calendar_content = """\
+FullMoon+1\tDay after full moon
+"""
+    # Full moon Jan 3, 2026 → FullMoon+1 = Jan 4
+    today = datetime.date(2026, 1, 4)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Jan  4\tDay after full moon"]
+
+
+def test_standalone_weekday(run_calendar):
+    """Test standalone weekday matches (e.g., Friday matches every Friday)."""
+    calendar_content = """\
+Friday\tTGIF!
+"""
+    # Jan 2, 2026 is a Friday
+    today = datetime.date(2026, 1, 2)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Jan  2\tTGIF!"]
+
+    # Jan 1, 2026 is a Thursday — no match
+    today = datetime.date(2026, 1, 1)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == []
+
+
+def test_mixed_formats_sorting(run_calendar):
+    """Test sorting with mixed fixed, weekday, and standalone expressions."""
+    calendar_content = """\
+01/02\tNew Year recovery
+Friday\tTGIF!
+Jan Mon+1\tFirst Monday
+"""
+    # Check Jan 1-5, 2026:
+    #   Jan 1 = Thu, Jan 2 = Fri, Jan 3 = Sat, Jan 4 = Sun, Jan 5 = Mon
+    today = datetime.date(2026, 1, 1)
+    result = run_calendar(calendar_content, today, ahead=4)
+    assert result == [
+        "Jan  2\tNew Year recovery",
+        "Jan  2\tTGIF!",
+        "Jan  5\tFirst Monday",
+    ]
+
+
 def test_cli_smoke(tmp_path, monkeypatch):
     """Smoke test: invoke the CLI entry point and verify it produces expected output."""
     calendar_file = tmp_path / "calendar"
