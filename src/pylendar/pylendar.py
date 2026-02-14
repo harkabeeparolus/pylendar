@@ -26,6 +26,8 @@ Supported Date Formats:
     - * DD            (e.g., * 9) - for the nth day of any month
     - Month Wkday+N   (e.g., May Sun+2) - Nth weekday of a month
     - Month Wkday-N   (e.g., May Mon-1) - last Nth weekday of a month
+    - MM/WkdayOrd     (e.g., 10/MonSecond) - Nth weekday using ordinal
+    - Month/WkdayOrd  (e.g., Oct/SatFourth-2) - with optional day offset
     - * Wkday+N       (e.g., * Fri+3) - Nth weekday of every month
     - Easter          Catholic Easter
     - Special+/-N     (e.g., Easter-2, FullMoon+1) - offset from special date
@@ -83,6 +85,15 @@ DEFAULT_CALENDAR_PATHS: list[Path] = [
     Path("/usr/share/calendar"),
     Path("/usr/local/share/calendar"),
 ]
+
+ORDINAL_MAP: dict[str, int] = {
+    "first": 1,
+    "second": 2,
+    "third": 3,
+    "fourth": 4,
+    "fifth": 5,
+    "last": -1,
+}
 
 
 class DateExpr(ABC):
@@ -410,12 +421,48 @@ class DateStringParser:
 
         return self._parse_format_patterns(date_str)
 
-    def _parse_format_patterns(self, date_str: str) -> DateExpr | None:
-        """Parse regex-based date format patterns."""
-        # MM/DD (e.g., 07/09)
+    def _parse_ordinal_weekday(self, date_str: str) -> DateExpr | None:
+        """Parse BSD ordinal weekday formats (e.g., 10/MonSecond, Oct/SatFourth-2)."""
+        ordinals = "|".join(ORDINAL_MAP)
+
+        # MM/WkdayOrdinal with optional offset (e.g., 10/monsecond, 01/monthird)
+        match = re.fullmatch(rf"(\d{{1,2}})/([a-z]+)({ordinals})([+-]\d+)?", date_str)
+        if match:
+            month = int(match.group(1))
+            wkday_name = match.group(2)
+        else:
+            # Month/WkdayOrdinal with optional offset (e.g., oct/satfourth-2)
+            match = re.fullmatch(rf"([a-z]+)/([a-z]+)({ordinals})([+-]\d+)?", date_str)
+            if not match:
+                return None
+            month_name = match.group(1)
+            if month_name not in self.month_map:
+                return None
+            month = self.month_map[month_name]
+            wkday_name = match.group(2)
+
+        if wkday_name not in self.weekday_map:
+            return None
+        n = ORDINAL_MAP[match.group(3)]
+        base: DateExpr = NthWeekdayOfMonth(month, self.weekday_map[wkday_name], n)
+        if match.group(4):
+            base = OffsetDateExpr(base, int(match.group(4)))
+        return base
+
+    @staticmethod
+    def _parse_mm_dd(date_str: str) -> DateExpr | None:
+        """Parse MM/DD format (e.g., 07/09)."""
         match = re.fullmatch(r"(\d{1,2})/(\d{1,2})", date_str)
         if match:
             return FixedDate(int(match.group(1)), int(match.group(2)))
+        return None
+
+    def _parse_format_patterns(self, date_str: str) -> DateExpr | None:
+        """Parse regex-based date format patterns."""
+        # MM/WkdayOrdinal, Month/WkdayOrdinal, or MM/DD
+        # (e.g., 10/MonSecond, Oct/SatFourth-2, 07/09)
+        if "/" in date_str:
+            return self._parse_ordinal_weekday(date_str) or self._parse_mm_dd(date_str)
 
         # Month Weekday+/-N (e.g., May Sun+2, Nov Thu+4, May Mon-1)
         # Must precede Month DD so "May Sun+2" isn't partially matched

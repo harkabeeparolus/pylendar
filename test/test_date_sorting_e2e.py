@@ -368,6 +368,46 @@ Jan Mon+1\tFirst Monday
     ]
 
 
+def test_ordinal_weekday_numeric_month(run_calendar):
+    """Test MM/WkdayOrdinal format (e.g., 10/MonSecond for Thanksgiving Canada)."""
+    calendar_content = """\
+10/MonSecond\tThanksgiving Day in Canada
+12/SunFirst\tFirst Sunday of Advent
+01/MonThird\tMartin Luther King Day
+05/MonLast\tMemorial Day
+"""
+    # 2nd Monday of October 2026: Oct 12
+    today = datetime.date(2026, 10, 12)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Oct 12\tThanksgiving Day in Canada"]
+
+    # 1st Sunday of December 2026: Dec 6
+    today = datetime.date(2026, 12, 6)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Dec  6\tFirst Sunday of Advent"]
+
+    # 3rd Monday of January 2026: Jan 19
+    today = datetime.date(2026, 1, 19)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Jan 19\tMartin Luther King Day"]
+
+    # Last Monday of May 2026: May 25
+    today = datetime.date(2026, 5, 25)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["May 25\tMemorial Day"]
+
+
+def test_ordinal_weekday_named_month_with_offset(run_calendar):
+    """Test Month/WkdayOrdinal with day offset (e.g., Oct/SatFourth-2)."""
+    calendar_content = """\
+Oct/SatFourth-2\tHobart Show Day (TAS)
+"""
+    # 4th Saturday of October 2026: Oct 24, minus 2 = Oct 22
+    today = datetime.date(2026, 10, 22)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Oct 22\tHobart Show Day (TAS)"]
+
+
 def test_cli_smoke(tmp_path, monkeypatch):
     """Smoke test: invoke the CLI entry point and verify it produces expected output."""
     calendar_file = tmp_path / "calendar"
