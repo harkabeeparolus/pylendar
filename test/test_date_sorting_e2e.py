@@ -37,18 +37,12 @@ def run_calendar(tmp_path):
         ahead_days, behind_days = get_ahead_behind(today, ahead=ahead, behind=behind)
         dates_to_check = get_dates_to_check(today, ahead=ahead_days, behind=behind_days)
 
-        special_dates, recurring_events = parse_special_dates(
-            calendar_lines, today.year
-        )
-        date_parser = DateStringParser(special_dates)
+        date_exprs = parse_special_dates(calendar_lines, today.year)
+        date_parser = DateStringParser(date_exprs)
         matching_events = [
             event
             for line in calendar_lines
-            if (
-                event := get_matching_event(
-                    line, dates_to_check, date_parser, recurring_events
-                )
-            )
+            if (event := get_matching_event(line, dates_to_check, date_parser))
         ]
         return [str(event) for event in sorted(matching_events)]
 

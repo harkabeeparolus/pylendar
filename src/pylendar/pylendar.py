@@ -46,15 +46,16 @@ Jul 4	US Independence Day
 
 import argparse
 import calendar
+import contextlib
 import datetime
 import logging
 import os
 import re
 import sys
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import NamedTuple
 
 try:
     import dateutil.easter
@@ -78,14 +79,65 @@ DEFAULT_CALENDAR_PATHS: list[Path] = [
     Path("/usr/local/share/calendar"),
 ]
 
-SpecialDates = dict[str, datetime.date]
+
+class DateExpr(ABC):
+    """A date expression that resolves to concrete dates for a given year."""
+
+    @abstractmethod
+    def resolve(self, year: int) -> set[datetime.date]:
+        """Return the set of dates this expression matches in the given year."""
 
 
-class ParsedDate(NamedTuple):
-    """Result of parsing a date string."""
+@dataclass(frozen=True)
+class FixedDate(DateExpr):
+    """A fixed month/day (e.g., 07/04, Jul 4)."""
 
-    month: int | None
-    day: int | None
+    month: int
+    day: int
+
+    def resolve(self, year: int) -> set[datetime.date]:
+        """Return the single date for this month/day in the given year."""
+        try:
+            return {datetime.date(year, self.month, self.day)}
+        except ValueError:
+            return set()
+
+
+@dataclass(frozen=True)
+class WildcardDay(DateExpr):
+    """Matches the given day in every month (e.g., * 15)."""
+
+    day: int
+
+    def resolve(self, year: int) -> set[datetime.date]:
+        """Return dates for this day in all 12 months of the given year."""
+        dates: set[datetime.date] = set()
+        for month in range(1, 13):
+            with contextlib.suppress(ValueError):
+                dates.add(datetime.date(year, month, self.day))
+        return dates
+
+
+@dataclass(frozen=True)
+class SpecialDate(DateExpr):
+    """A pre-resolved single-occurrence date (Easter, equinox, etc.)."""
+
+    date: datetime.date
+
+    def resolve(self, year: int) -> set[datetime.date]:  # noqa: ARG002
+        """Return the pre-resolved date."""
+        return {self.date}
+
+
+@dataclass(frozen=True)
+class RecurringDate(DateExpr):
+    """A set of pre-resolved recurring dates (full moons, new moons, etc.)."""
+
+    dates: frozenset[datetime.date]
+
+    def resolve(self, year: int) -> set[datetime.date]:  # noqa: ARG002
+        """Return all pre-resolved dates."""
+        return set(self.dates)
 
 
 def main() -> None:
@@ -124,28 +176,22 @@ def cli() -> None:
     dates_to_check = get_dates_to_check(args.today, ahead=ahead, behind=behind)
 
     # Parse special dates and aliases once
-    special_dates, recurring_events = parse_special_dates(
-        calendar_lines, args.today.year
-    )
+    date_exprs = parse_special_dates(calendar_lines, args.today.year)
 
-    # Create a DateStringParser instance with special dates
-    date_parser = DateStringParser(special_dates)
+    # Create a DateStringParser instance with date expressions
+    date_parser = DateStringParser(date_exprs)
 
     log.debug(f"File path = {calendar_path}")
     log.debug(f"Today is {args.today}")
     log.debug(f"Ahead = {ahead}, Behind = {behind}")
     log.debug(f"dates_to_check = {dates_to_check}")
-    log.debug(f"special_dates = {special_dates}")
+    log.debug(f"date_exprs = {date_exprs}")
 
     # Collect calendar events matching any of the current dates
     matching_events = [
         event
         for line in calendar_lines
-        if (
-            event := get_matching_event(
-                line, dates_to_check, date_parser, recurring_events
-            )
-        )
+        if (event := get_matching_event(line, dates_to_check, date_parser))
     ]
 
     # Sort events by date and print them
@@ -208,10 +254,10 @@ class DateStringParser:
 
     def __init__(
         self,
-        special_dates: SpecialDates | None = None,
+        date_exprs: dict[str, DateExpr] | None = None,
     ) -> None:
-        """Initialize the parser with optional special dates."""
-        self.special_dates = special_dates or {}
+        """Initialize the parser with optional date expressions."""
+        self.date_exprs = date_exprs or {}
         self.month_map = self.build_month_map()
 
         # Ensure we have month names in US English locale
@@ -231,23 +277,23 @@ class DateStringParser:
             if m
         }
 
-    def parse(self, date_str: str) -> ParsedDate:
+    def parse(self, date_str: str) -> DateExpr | None:
         """Parse a date string from the calendar file.
 
-        Supports special dates and aliases.
+        Supports special dates, aliases, and standard date formats.
         """
         date_str = date_str.strip().lower()
 
         # Handle special dates and aliases
-        if special_date := self.special_dates.get(date_str):
-            return ParsedDate(special_date.month, special_date.day)
+        if date_expr := self.date_exprs.get(date_str):
+            return date_expr
 
         # Pattern 1: MM/DD (e.g., 07/09)
         match = re.fullmatch(r"(?P<month>\d{1,2})/(?P<day>\d{1,2})", date_str)
         if match:
             month = int(match.group("month"))
             day = int(match.group("day"))
-            return ParsedDate(month, day)
+            return FixedDate(month, day)
 
         # Pattern 2: Month DD (e.g., July 9 or Jul 9)
         match = re.fullmatch(
@@ -257,15 +303,15 @@ class DateStringParser:
             month_name = match.group("month_name")
             day = int(match.group("day"))
             if month_name in self.month_map:
-                return ParsedDate(self.month_map[month_name], day)
+                return FixedDate(self.month_map[month_name], day)
 
         # Pattern 3: * DD (e.g., * 9)
         match = re.fullmatch(r"\*\s+(?P<day>\d{1,2})", date_str)
         if match:
             day = int(match.group("day"))
-            return ParsedDate(None, day)  # None for month signifies a wildcard
+            return WildcardDay(day)
 
-        return ParsedDate(None, None)
+        return None
 
 
 def remove_comments(code: str) -> str:
@@ -346,7 +392,7 @@ class SimpleCPP:
         return None
 
 
-def get_seasons(year: int) -> SpecialDates:
+def get_seasons(year: int) -> dict[str, datetime.date]:
     """Get the dates of equinoxes and solstices for a given year.
 
     Returns:
@@ -387,23 +433,25 @@ def get_moon_phases(year: int) -> dict[str, set[datetime.date]]:
     return moon_phases
 
 
-def parse_special_dates(
-    calendar_lines: list[str], year: int
-) -> tuple[SpecialDates, dict[str, set[datetime.date]]]:
+def parse_special_dates(calendar_lines: list[str], year: int) -> dict[str, DateExpr]:
     """Parse special date definitions and aliases from the calendar file.
 
     Returns:
-        tuple of (special_dates, recurring_events)
-        - special_dates: dict of single-occurrence dates (Easter, seasons)
-        - recurring_events: dict of multiple-occurrence dates (moon phases)
+        dict mapping date keywords to DateExpr objects
 
     """
-    # Start with known special dates
-    special_dates = {"easter": dateutil.easter.easter(year)}
+    date_exprs: dict[str, DateExpr] = {}
 
-    # Add astronomical dates
-    special_dates.update(get_seasons(year))
-    recurring_events = get_moon_phases(year)
+    # Start with known special dates
+    date_exprs["easter"] = SpecialDate(dateutil.easter.easter(year))
+
+    # Add astronomical season dates
+    for name, date in get_seasons(year).items():
+        date_exprs[name] = SpecialDate(date)
+
+    # Add moon phases as recurring dates
+    for name, dates in get_moon_phases(year).items():
+        date_exprs[name] = RecurringDate(frozenset(dates))
 
     # Parse aliases from calendar file
     for line in calendar_lines:
@@ -411,13 +459,13 @@ def parse_special_dates(
             left, right = line.split("=", 1)
             left = left.strip().lower()
             right = right.strip().lower()
-            # If either side is a known special date, add the alias
-            if left in special_dates and right not in special_dates:
-                special_dates[right] = special_dates[left]
-            elif right in special_dates:
-                special_dates[left] = special_dates[right]
+            # If either side is a known date expr, add the alias
+            if left in date_exprs and right not in date_exprs:
+                date_exprs[right] = date_exprs[left]
+            elif right in date_exprs:
+                date_exprs[left] = date_exprs[right]
 
-    return special_dates, recurring_events
+    return date_exprs
 
 
 def parse_today_arg(t_str: str) -> datetime.date:
@@ -554,45 +602,30 @@ def get_matching_event(
     line: str,
     dates_to_check: set[datetime.date],
     parser: DateStringParser,
-    recurring_events: dict[str, set[datetime.date]] | None = None,
 ) -> Event | None:
     """Get the event from this line if it matches any of the target dates.
 
     Returns an Event object if the event matches any of the
     dates to check, or None if there's no match.
     """
-    # Validate line has content and tab separator
     if not line.strip() or "\t" not in line:
         return None
 
     date_str, event_description = line.split("\t", 1)
-    date_str_lower = date_str.strip().lower()
-
-    # Check recurring events (moon phases) first
-    if recurring_events and date_str_lower in recurring_events:
-        for check_date in dates_to_check:
-            if check_date in recurring_events[date_str_lower]:
-                desc = replace_age_in_description(event_description, check_date)
-                return Event(check_date, desc)
+    expr = parser.parse(date_str)
+    if expr is None:
         return None
 
-    # Normal date parsing for special dates and regular dates
-    parsed = parser.parse(date_str)
-    if parsed.day is None:
-        return None
+    years = {d.year for d in dates_to_check}
+    resolved: set[datetime.date] = set()
+    for year in years:
+        resolved |= expr.resolve(year)
+    matching = resolved & dates_to_check
 
-    for check_date in dates_to_check:
-        # Check for wildcard month match (e.g., "* 15")
-        is_wildcard_match = parsed.month is None and parsed.day == check_date.day
-
-        # Check for specific month and day match
-        is_full_date_match = (
-            parsed.month == check_date.month and parsed.day == check_date.day
-        )
-        if is_wildcard_match or is_full_date_match:
-            desc = replace_age_in_description(event_description, check_date)
-            return Event(check_date, desc)
-
+    if matching:
+        check_date = min(matching)
+        desc = replace_age_in_description(event_description, check_date)
+        return Event(check_date, desc)
     return None
 
 
