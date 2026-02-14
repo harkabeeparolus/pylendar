@@ -1,11 +1,13 @@
 # pylint: disable=duplicate-code
-"""End-to-end tests for date sorting functionality.
+"""End-to-end tests for pylendar.
 
-These tests verify that events are properly sorted by date when displayed,
-without creating test files in the current directory.
+These tests verify the full pipeline: preprocessing, parsing, matching, sorting,
+and CLI invocation.
 """
 
 import datetime
+import io
+import sys
 
 import pytest
 
@@ -16,6 +18,7 @@ from pylendar.pylendar import (
     get_dates_to_check,
     get_matching_event,
     join_continuation_lines,
+    main,
     parse_special_dates,
 )
 
@@ -250,3 +253,21 @@ FullMoon	Full moon party tonight!
         "Jan 18\tNew moon - time for reflection",
     ]
     assert result == expected
+
+
+def test_cli_smoke(tmp_path, monkeypatch):
+    """Smoke test: invoke the CLI entry point and verify it produces expected output."""
+    calendar_file = tmp_path / "calendar"
+    calendar_file.write_text("01/15\tTest event\n01/16\tAnother event\n")
+
+    monkeypatch.setattr(
+        sys, "argv", ["pylendar", "-f", str(calendar_file), "-t", "20260115"]
+    )
+    stdout = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", stdout)
+
+    main()
+
+    output = stdout.getvalue()
+    assert "Jan 15\tTest event" in output
+    assert "Jan 16\tAnother event" in output
