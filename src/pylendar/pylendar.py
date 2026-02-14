@@ -51,8 +51,10 @@ import logging
 import os
 import re
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 try:
     import dateutil.easter
@@ -77,6 +79,13 @@ DEFAULT_CALENDAR_PATHS: list[Path] = [
 ]
 
 SpecialDates = dict[str, datetime.date]
+
+
+class ParsedDate(NamedTuple):
+    """Result of parsing a date string."""
+
+    month: int | None
+    day: int | None
 
 
 def main() -> None:
@@ -122,7 +131,7 @@ def cli() -> None:
     )
 
     # Create a DateStringParser instance with special dates
-    date_parser = DateStringParser(special_dates, recurring_events)
+    date_parser = DateStringParser(special_dates)
 
     log.debug(f"File path = {calendar_path}")
     log.debug(f"Today is {args.today}")
@@ -134,7 +143,11 @@ def cli() -> None:
     matching_events = [
         event
         for line in calendar_lines
-        if (event := get_matching_event(line, dates_to_check, date_parser))
+        if (
+            event := get_matching_event(
+                line, dates_to_check, date_parser, recurring_events
+            )
+        )
     ]
 
     # Sort events by date and print them
@@ -158,7 +171,7 @@ def join_continuation_lines(lines: list[str]) -> list[str]:
     return result
 
 
-def setup_logging():
+def setup_logging() -> None:
     """Set up logging configuration."""
     logging.basicConfig(
         level=logging.INFO,
@@ -174,11 +187,11 @@ class Event:
     date: datetime.date
     description: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Clean up the description by stripping whitespace."""
         self.description = self.description.strip()
 
-    def __lt__(self, other):
+    def __lt__(self, other: object) -> bool:
         """Enable sorting events by date."""
         if not isinstance(other, Event):
             return NotImplemented
@@ -198,15 +211,13 @@ class DateStringParser:
     def __init__(
         self,
         special_dates: SpecialDates | None = None,
-        recurring_events: dict[str, set[datetime.date]] | None = None,
     ) -> None:
-        """Initialize the parser with optional special dates and recurring events."""
+        """Initialize the parser with optional special dates."""
         self.special_dates = special_dates or {}
-        self.recurring_events = recurring_events or {}
         self.month_map = self.build_month_map()
 
         # Ensure we have month names in US English locale
-        with calendar.different_locale("C"):  # type: ignore[reportArgumentType]
+        with calendar.different_locale("C"):  # type: ignore[arg-type]
             self.month_map.update(self.build_month_map())
 
     @staticmethod
@@ -222,7 +233,7 @@ class DateStringParser:
             if m
         }
 
-    def parse(self, date_str):
+    def parse(self, date_str: str) -> ParsedDate:
         """Parse a date string from the calendar file.
 
         Supports special dates and aliases.
@@ -231,14 +242,14 @@ class DateStringParser:
 
         # Handle special dates and aliases
         if special_date := self.special_dates.get(date_str):
-            return special_date.month, special_date.day
+            return ParsedDate(special_date.month, special_date.day)
 
         # Pattern 1: MM/DD (e.g., 07/09)
         match = re.fullmatch(r"(?P<month>\d{1,2})/(?P<day>\d{1,2})", date_str)
         if match:
             month = int(match.group("month"))
             day = int(match.group("day"))
-            return month, day
+            return ParsedDate(month, day)
 
         # Pattern 2: Month DD (e.g., July 9 or Jul 9)
         match = re.fullmatch(
@@ -248,15 +259,15 @@ class DateStringParser:
             month_name = match.group("month_name")
             day = int(match.group("day"))
             if month_name in self.month_map:
-                return self.month_map[month_name], day
+                return ParsedDate(self.month_map[month_name], day)
 
         # Pattern 3: * DD (e.g., * 9)
         match = re.fullmatch(r"\*\s+(?P<day>\d{1,2})", date_str)
         if match:
             day = int(match.group("day"))
-            return None, day  # None for month signifies a wildcard
+            return ParsedDate(None, day)  # None for month signifies a wildcard
 
-        return None, None
+        return ParsedDate(None, None)
 
 
 def remove_comments(code: str) -> str:
@@ -273,7 +284,7 @@ def remove_comments(code: str) -> str:
 class SimpleCPP:
     """A simple C/C++ preprocessor emulator."""
 
-    def __init__(self, include_dirs: list[Path | str]) -> None:
+    def __init__(self, include_dirs: Sequence[Path | str]) -> None:
         """Initialize the preprocessor with include directories."""
         self.include_dirs = [Path(d) for d in include_dirs]
         self.included_files: set[Path] = set()
@@ -358,31 +369,19 @@ def get_moon_phases(year: int) -> dict[str, set[datetime.date]]:
 
     """
     moon_phases: dict[str, set[datetime.date]] = {"newmoon": set(), "fullmoon": set()}
-
-    # Find all new moons (phase = 0°) in the year
     start_time = astronomy.Time.Make(year, 1, 1, 0, 0, 0)
-    search_time = start_time
-    while True:
-        moon_phase = astronomy.SearchMoonPhase(0, search_time, 40)
-        if moon_phase is None:
-            break
-        phase_date = moon_phase.Utc().date()
-        if phase_date.year != year:
-            break
-        moon_phases["newmoon"].add(phase_date)
-        search_time = astronomy.Time.AddDays(moon_phase, 1)
 
-    # Find all full moons (phase = 180°) in the year
-    search_time = start_time
-    while True:
-        moon_phase = astronomy.SearchMoonPhase(180, search_time, 40)
-        if moon_phase is None:
-            break
-        phase_date = moon_phase.Utc().date()
-        if phase_date.year != year:
-            break
-        moon_phases["fullmoon"].add(phase_date)
-        search_time = astronomy.Time.AddDays(moon_phase, 1)
+    for phase_name, phase_angle in [("newmoon", 0), ("fullmoon", 180)]:
+        search_time = start_time
+        while True:
+            moon_phase = astronomy.SearchMoonPhase(phase_angle, search_time, 40)
+            if moon_phase is None:
+                break
+            phase_date = moon_phase.Utc().date()
+            if phase_date.year != year:
+                break
+            moon_phases[phase_name].add(phase_date)
+            search_time = astronomy.Time.AddDays(moon_phase, 1)
 
     return moon_phases
 
@@ -420,7 +419,7 @@ def parse_special_dates(
     return special_dates, recurring_events
 
 
-def parse_today_arg(t_str):
+def parse_today_arg(t_str: str) -> datetime.date:
     """Parse the -t argument and return a datetime.date object.
 
     Acceptable formats are: dd, mmdd, yymmdd, ccyymmdd
@@ -455,7 +454,9 @@ def parse_today_arg(t_str):
     raise argparse.ArgumentTypeError(msg)
 
 
-def get_dates_to_check(today, ahead=1, behind=0):
+def get_dates_to_check(
+    today: datetime.date, ahead: int = 1, behind: int = 0
+) -> set[datetime.date]:
     """Determine the set of dates to check for events, given -A and -B options."""
     dates = set()
     for offset in range(-behind, ahead + 1):
@@ -463,7 +464,7 @@ def get_dates_to_check(today, ahead=1, behind=0):
     return dates
 
 
-def build_parser():
+def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser for the calendar utility."""
     parser = argparse.ArgumentParser(
         description="A Python replacement for the BSD calendar utility.",
@@ -509,7 +510,9 @@ def build_parser():
     return parser
 
 
-def get_ahead_behind(today, ahead=None, behind=0):
+def get_ahead_behind(
+    today: datetime.date, ahead: int | None = None, behind: int = 0
+) -> tuple[int, int]:
     """Determine the number of days to look ahead and behind based on the arguments.
 
     Args:
@@ -547,7 +550,10 @@ def replace_age_in_description(description: str, check_date: datetime.date) -> s
 
 
 def get_matching_event(
-    line: str, dates_to_check: set[datetime.date], parser: DateStringParser
+    line: str,
+    dates_to_check: set[datetime.date],
+    parser: DateStringParser,
+    recurring_events: dict[str, set[datetime.date]] | None = None,
 ) -> Event | None:
     """Get the event from this line if it matches any of the target dates.
 
@@ -562,25 +568,25 @@ def get_matching_event(
     date_str_lower = date_str.strip().lower()
 
     # Check recurring events (moon phases) first
-    if date_str_lower in parser.recurring_events:
+    if recurring_events and date_str_lower in recurring_events:
         for check_date in dates_to_check:
-            if check_date in parser.recurring_events[date_str_lower]:
+            if check_date in recurring_events[date_str_lower]:
                 desc = replace_age_in_description(event_description, check_date)
                 return Event(check_date, desc)
         return None
 
     # Normal date parsing for special dates and regular dates
-    parsed_month, parsed_day = parser.parse(date_str)
-    if parsed_day is None:
+    parsed = parser.parse(date_str)
+    if parsed.day is None:
         return None
 
     for check_date in dates_to_check:
         # Check for wildcard month match (e.g., "* 15")
-        is_wildcard_match = parsed_month is None and parsed_day == check_date.day
+        is_wildcard_match = parsed.month is None and parsed.day == check_date.day
 
         # Check for specific month and day match
         is_full_date_match = (
-            parsed_month == check_date.month and parsed_day == check_date.day
+            parsed.month == check_date.month and parsed.day == check_date.day
         )
         if is_wildcard_match or is_full_date_match:
             desc = replace_age_in_description(event_description, check_date)
@@ -589,7 +595,7 @@ def get_matching_event(
     return None
 
 
-def find_calendar_and_chdir(look_in: list[str | Path]) -> Path:
+def find_calendar_and_chdir(look_in: Sequence[Path]) -> Path:
     """Resolve the calendar file path and chdir to its directory.
 
     Changes working directory so that relative #include paths resolve correctly.
@@ -606,4 +612,4 @@ def find_calendar_and_chdir(look_in: list[str | Path]) -> Path:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

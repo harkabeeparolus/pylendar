@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 """End-to-end tests for date sorting functionality.
 
 These tests verify that events are properly sorted by date when displayed,
@@ -49,13 +50,17 @@ def _test_calendar_sorting(tmp_path, calendar_content, today, ahead=None, behind
 
     # Parse special dates and create parser
     special_dates, recurring_events = parse_special_dates(calendar_lines, today.year)
-    date_parser = DateStringParser(special_dates, recurring_events)
+    date_parser = DateStringParser(special_dates)
 
     # Collect matching events
     matching_events = [
         event
         for line in calendar_lines
-        if (event := get_matching_event(line, dates_to_check, date_parser))
+        if (
+            event := get_matching_event(
+                line, dates_to_check, date_parser, recurring_events
+            )
+        )
     ]
 
     # Sort events and return result list

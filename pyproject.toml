@@ -22,7 +22,13 @@ requires = ["uv_build>=0.7.19,<0.8"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dev = ["pylint>=3.3.7", "pytest>=6.0"]
+dev = [
+    "mypy>=1.19.1",
+    "pylint>=3.3.7",
+    "pytest>=6.0",
+    "ty>=0.0.17",
+    "types-python-dateutil>=2.9.0.20260124",
+]
 
 # Linting configuration
 
@@ -42,6 +48,13 @@ ignore = [
     "DTZ",    # flake8-datetimez (DTZ)
     "G004",   # flake8-logging-format (G): logging-f-string
 ]
+
+[tool.mypy]
+python_version = "3.11"
+
+[[tool.mypy.overrides]]
+module = "astronomy"
+ignore_missing_imports = true
 
 [tool.pylint]
 main.py-version = "3.11"
