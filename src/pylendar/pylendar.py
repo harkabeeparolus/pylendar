@@ -63,6 +63,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 try:
     import dateutil.easter
@@ -99,6 +100,13 @@ ORDINAL_MAP: dict[str, int] = {
 class DateExpr(ABC):
     """A date expression that resolves to concrete dates for a given year."""
 
+    variable: ClassVar[bool] = True
+    """Whether the resolved date changes from year to year.
+
+    BSD calendar marks variable dates with an asterisk in the output.
+    Fixed expressions like MM/DD and * DD override this to False.
+    """
+
     @abstractmethod
     def resolve(self, year: int) -> set[datetime.date]:
         """Return the set of dates this expression matches in the given year."""
@@ -107,6 +115,8 @@ class DateExpr(ABC):
 @dataclass(frozen=True)
 class FixedDate(DateExpr):
     """A fixed month/day (e.g., 07/04, Jul 4)."""
+
+    variable: ClassVar[bool] = False
 
     month: int
     day: int
@@ -122,6 +132,8 @@ class FixedDate(DateExpr):
 @dataclass(frozen=True)
 class WildcardDay(DateExpr):
     """Matches the given day in every month (e.g., * 15)."""
+
+    variable: ClassVar[bool] = False
 
     day: int
 
@@ -216,6 +228,11 @@ class OffsetDateExpr(DateExpr):
 
     base: DateExpr
     offset: int
+
+    @property
+    def variable(self) -> bool:  # type: ignore[override]
+        """Delegate to the base expression."""
+        return self.base.variable
 
     def resolve(self, year: int) -> set[datetime.date]:
         """Return base dates shifted by offset days."""
@@ -332,6 +349,7 @@ class Event:
 
     date: datetime.date
     description: str
+    variable: bool = False
 
     def __post_init__(self) -> None:
         """Clean up the description by stripping whitespace."""
@@ -345,7 +363,8 @@ class Event:
 
     def __str__(self) -> str:
         """Format the event for display output."""
-        formatted_date = f"{self.date:%b} {self.date.day:2}"
+        star = "*" if self.variable else ""
+        formatted_date = f"{self.date:%b} {self.date.day:2}{star}"
         return f"{formatted_date}\t{self.description}"
 
 
@@ -813,7 +832,7 @@ def get_matching_event(
     if matching:
         check_date = min(matching)
         desc = replace_age_in_description(event_description, check_date)
-        return Event(check_date, desc)
+        return Event(check_date, desc, variable=expr.variable)
     return None
 
 

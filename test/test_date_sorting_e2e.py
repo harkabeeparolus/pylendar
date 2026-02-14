@@ -219,14 +219,14 @@ DecSolstice	Winter begins - shortest day of the year
     today = datetime.date(2026, 3, 20)
     result = run_calendar(calendar_content, today, ahead=1)
 
-    expected = ["Mar 20\tSpring begins"]
+    expected = ["Mar 20*\tSpring begins"]
     assert result == expected
 
     # Test around winter solstice 2026 (December 21)
     today = datetime.date(2026, 12, 20)
     result = run_calendar(calendar_content, today, ahead=2)
 
-    expected = ["Dec 21\tWinter begins - shortest day of the year"]
+    expected = ["Dec 21*\tWinter begins - shortest day of the year"]
     assert result == expected
 
 
@@ -243,8 +243,8 @@ FullMoon	Full moon party tonight!
     result = run_calendar(calendar_content, today, ahead=20)
 
     expected = [
-        "Jan  3\tFull moon party tonight!",
-        "Jan 18\tNew moon - time for reflection",
+        "Jan  3*\tFull moon party tonight!",
+        "Jan 18*\tNew moon - time for reflection",
     ]
     assert result == expected
 
@@ -259,17 +259,17 @@ Nov Thu+4\tThanksgiving
     # Mother's Day 2026: May 10 (2nd Sunday)
     today = datetime.date(2026, 5, 10)
     result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["May 10\tMother's Day"]
+    assert result == ["May 10*\tMother's Day"]
 
     # Labor Day 2026: Sep 7 (1st Monday)
     today = datetime.date(2026, 9, 7)
     result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Sep  7\tLabor Day"]
+    assert result == ["Sep  7*\tLabor Day"]
 
     # Thanksgiving 2026: Nov 26 (4th Thursday)
     today = datetime.date(2026, 11, 26)
     result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Nov 26\tThanksgiving"]
+    assert result == ["Nov 26*\tThanksgiving"]
 
 
 def test_last_weekday_of_month(run_calendar):
@@ -280,7 +280,7 @@ May Mon-1\tMemorial Day
     # Memorial Day 2026: May 25 (last Monday)
     today = datetime.date(2026, 5, 25)
     result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["May 25\tMemorial Day"]
+    assert result == ["May 25*\tMemorial Day"]
 
 
 def test_fifth_weekday_no_match(run_calendar):
@@ -302,7 +302,7 @@ def test_wildcard_nth_weekday(run_calendar):
     # 3rd Friday of January 2026 is Jan 16
     today = datetime.date(2026, 1, 16)
     result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Jan 16\tThird Friday"]
+    assert result == ["Jan 16*\tThird Friday"]
 
 
 def test_easter_offset(run_calendar):
@@ -315,12 +315,12 @@ Easter-46\tAsh Wednesday
     # Good Friday: April 3
     today = datetime.date(2026, 4, 3)
     result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Apr  3\tGood Friday"]
+    assert result == ["Apr  3*\tGood Friday"]
 
     # Ash Wednesday: Feb 18
     today = datetime.date(2026, 2, 18)
     result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Feb 18\tAsh Wednesday"]
+    assert result == ["Feb 18*\tAsh Wednesday"]
 
 
 def test_recurring_date_offset(run_calendar):
@@ -331,7 +331,7 @@ FullMoon+1\tDay after full moon
     # Full moon Jan 3, 2026 → FullMoon+1 = Jan 4
     today = datetime.date(2026, 1, 4)
     result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Jan  4\tDay after full moon"]
+    assert result == ["Jan  4*\tDay after full moon"]
 
 
 def test_standalone_weekday(run_calendar):
@@ -342,7 +342,7 @@ Friday\tTGIF!
     # Jan 2, 2026 is a Friday
     today = datetime.date(2026, 1, 2)
     result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Jan  2\tTGIF!"]
+    assert result == ["Jan  2*\tTGIF!"]
 
     # Jan 1, 2026 is a Thursday — no match
     today = datetime.date(2026, 1, 1)
@@ -363,8 +363,8 @@ Jan Mon+1\tFirst Monday
     result = run_calendar(calendar_content, today, ahead=4)
     assert result == [
         "Jan  2\tNew Year recovery",
-        "Jan  2\tTGIF!",
-        "Jan  5\tFirst Monday",
+        "Jan  2*\tTGIF!",
+        "Jan  5*\tFirst Monday",
     ]
 
 
@@ -379,22 +379,22 @@ def test_ordinal_weekday_numeric_month(run_calendar):
     # 2nd Monday of October 2026: Oct 12
     today = datetime.date(2026, 10, 12)
     result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Oct 12\tThanksgiving Day in Canada"]
+    assert result == ["Oct 12*\tThanksgiving Day in Canada"]
 
     # 1st Sunday of December 2026: Dec 6
     today = datetime.date(2026, 12, 6)
     result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Dec  6\tFirst Sunday of Advent"]
+    assert result == ["Dec  6*\tFirst Sunday of Advent"]
 
     # 3rd Monday of January 2026: Jan 19
     today = datetime.date(2026, 1, 19)
     result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Jan 19\tMartin Luther King Day"]
+    assert result == ["Jan 19*\tMartin Luther King Day"]
 
     # Last Monday of May 2026: May 25
     today = datetime.date(2026, 5, 25)
     result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["May 25\tMemorial Day"]
+    assert result == ["May 25*\tMemorial Day"]
 
 
 def test_ordinal_weekday_named_month_with_offset(run_calendar):
@@ -405,7 +405,7 @@ Oct/SatFourth-2\tHobart Show Day (TAS)
     # 4th Saturday of October 2026: Oct 24, minus 2 = Oct 22
     today = datetime.date(2026, 10, 22)
     result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Oct 22\tHobart Show Day (TAS)"]
+    assert result == ["Oct 22*\tHobart Show Day (TAS)"]
 
 
 def test_cli_smoke(tmp_path, monkeypatch):
