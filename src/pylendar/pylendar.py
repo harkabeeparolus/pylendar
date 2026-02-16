@@ -323,7 +323,11 @@ def cli() -> None:
         sys.exit(f"Error: Could not read calendar file: {e}")
     calendar_lines = join_continuation_lines(calendar_lines)
 
-    ahead, behind = get_ahead_behind(args.today, ahead=args.A, behind=args.B)
+    friday = bsd_to_python_weekday(args.F)
+    ahead_value = args.W if args.W is not None else args.A
+    ahead, behind = get_ahead_behind(
+        args.today, ahead=ahead_value, behind=args.B, friday=friday
+    )
     dates_to_check = get_dates_to_check(args.today, ahead=ahead, behind=behind)
 
     # Parse special dates and aliases once
@@ -855,13 +859,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--file",
         help="Path to the calendar file (default: 'calendar' in the current directory)",
     )
-    parser.add_argument(
+    ahead_group = parser.add_mutually_exclusive_group()
+    ahead_group.add_argument(
         "-A",
         type=int,
         default=None,
         metavar="num",
         help="Print lines from today and next num days (forward, future). "
         "Defaults to 1, except on Fridays the default is 3.",
+    )
+    ahead_group.add_argument(
+        "-W",
+        type=int,
+        default=None,
+        metavar="num",
+        help="Print lines from today and next num days (forward, future). "
+        "Disables the Friday look-ahead expansion (FreeBSD, macOS).",
     )
     parser.add_argument(
         "-B",
@@ -870,6 +883,14 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="num",
         help="Print lines from today and previous num days (backward, past). "
         "Default 0.",
+    )
+    parser.add_argument(
+        "-F",
+        type=int,
+        default=5,
+        metavar="friday",
+        help='Set which day is "Friday" (the day before the weekend). '
+        "Uses BSD day numbering: 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat. Default 5.",
     )
     parser.add_argument(
         "-t",
@@ -899,8 +920,17 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def bsd_to_python_weekday(bsd_wday: int) -> int:
+    """Convert BSD tm_wday (0=Sun..6=Sat) to Python weekday (0=Mon..6=Sun)."""
+    return (bsd_wday - 1) % 7
+
+
 def get_ahead_behind(
-    today: datetime.date, ahead: int | None = None, behind: int = 0
+    today: datetime.date,
+    ahead: int | None = None,
+    behind: int = 0,
+    *,
+    friday: int = 4,
 ) -> tuple[int, int]:
     """Determine the number of days to look ahead and behind based on the arguments.
 
@@ -908,12 +938,13 @@ def get_ahead_behind(
         today: The current date
         ahead: Number of days ahead to look (None for default behavior)
         behind: Number of days behind to look (default: 0)
+        friday: Which Python weekday (0=Mon..6=Sun) triggers the 3-day look-ahead.
+            Default 4 (Friday).
 
     Returns:
         tuple: (ahead_days, behind_days)
 
     """
-    friday = 4  # Friday is the 4th day of the week (0=Monday, 6=Sunday)
     weekday = today.weekday()
     ahead_days = ahead if ahead is not None else 3 if weekday == friday else 1
     behind_days = behind
