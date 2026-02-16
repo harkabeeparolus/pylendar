@@ -753,6 +753,9 @@ def parse_special_dates(calendar_lines: list[str], year: int) -> dict[str, DateE
 
     # Start with known special dates
     date_exprs["easter"] = SpecialDate(dateutil.easter.easter(year))
+    date_exprs["paskha"] = SpecialDate(
+        dateutil.easter.easter(year, method=dateutil.easter.EASTER_ORTHODOX)
+    )
 
     # Add astronomical season dates
     for name, date in get_seasons(year).items():

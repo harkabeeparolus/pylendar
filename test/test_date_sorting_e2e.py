@@ -275,6 +275,23 @@ Easter-46\tAsh Wednesday
     assert result == ["Feb 18*\tAsh Wednesday"]
 
 
+def test_paskha(run_calendar):
+    """Test Paskha (Orthodox Easter) and offset expressions."""
+    calendar_content = """\
+Paskha\tOrthodox Easter
+Paskha-2\tOrthodox Good Friday
+"""
+    # Paskha 2026 is April 12
+    today = datetime.date(2026, 4, 12)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Apr 12*\tOrthodox Easter"]
+
+    # Orthodox Good Friday: April 10
+    today = datetime.date(2026, 4, 10)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Apr 10*\tOrthodox Good Friday"]
+
+
 def test_recurring_date_offset(run_calendar):
     """Test offset from recurring date (e.g., FullMoon+1)."""
     calendar_content = """\

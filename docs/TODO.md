@@ -5,8 +5,6 @@ See [manpage_comparison.md](manpage_comparison.md) for full details.
 
 ## Missing Special Days
 
-- **Paskha** — Orthodox Easter (FreeBSD, macOS, OpenBSD, Debian).
-  Use `dateutil.easter.easter(year, method=EASTER_ORTHODOX)`.
 - **ChineseNewYear** — First day of the Chinese year (FreeBSD, macOS).
 
 ## Missing Date Format
