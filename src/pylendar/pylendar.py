@@ -109,6 +109,7 @@ ORDINAL_MAP: dict[str, int] = {
     "fifth": 5,
     "last": -1,
 }
+ORDINALS_RE = "|".join(ORDINAL_MAP)
 
 
 class DateExpr(ABC):  # pylint: disable=too-few-public-methods
@@ -319,7 +320,7 @@ def cli() -> None:
     processor = SimpleCPP(include_dirs=DEFAULT_CALENDAR_PATHS)
     try:
         calendar_lines = processor.process_file(calendar_path)
-    except OSError as e:
+    except (OSError, SyntaxError) as e:
         sys.exit(f"Error: Could not read calendar file: {e}")
     calendar_lines = join_continuation_lines(calendar_lines)
 
@@ -489,7 +490,7 @@ class DateStringParser:
 
     def _parse_ordinal_weekday(self, date_str: str) -> DateExpr | None:
         """Parse BSD ordinal weekday formats (e.g., 10/MonSecond, Oct/SatFourth-2)."""
-        ordinals = "|".join(ORDINAL_MAP)
+        ordinals = ORDINALS_RE
 
         # MM/WkdayOrdinal with optional offset (e.g., 10/monsecond, 01/monthird)
         match = re.fullmatch(rf"(\d{{1,2}})/([a-z]+)({ordinals})([+-]\d+)?", date_str)
@@ -599,7 +600,7 @@ class DateStringParser:
 
     def _parse_wkday_ord_month(self, date_str: str) -> DateExpr | None:
         """Parse WkdayOrd Month format (e.g., SunFirst Aug, SunThird Jul)."""
-        ordinals = "|".join(ORDINAL_MAP)
+        ordinals = ORDINALS_RE
         match = re.fullmatch(rf"([a-z]+)({ordinals})\s+([a-z]+)", date_str)
         if match:
             wkday_name = match.group(1)
@@ -689,16 +690,11 @@ class SimpleCPP:
                         lines.extend(self.process_file(include_file))
                     else:
                         msg = f"Included file not found: {include_target}"
-                        log.warning(f"Warning: {msg}")
+                        log.warning(msg)
                 else:
                     msg = f"Malformed include directive: {line}"
                     raise SyntaxError(msg)
-            elif re.match(r"#(define|ifndef|endif)", stripped):
-                # Skip basic preprocessor guards (emulated via included_files)
-                continue
             elif stripped.startswith("#"):
-                # Handle other preprocessor directives (e.g., #define, #ifdef)
-                # For now, we just skip them as they are not implemented
                 log.debug(f"Skipping preprocessor directive: {line}")
                 continue
             else:
@@ -843,10 +839,9 @@ def get_dates_to_check(
     today: datetime.date, ahead: int = 1, behind: int = 0
 ) -> set[datetime.date]:
     """Determine the set of dates to check for events, given -A and -B options."""
-    dates = set()
-    for offset in range(-behind, ahead + 1):
-        dates.add(today + datetime.timedelta(days=offset))
-    return dates
+    return {
+        today + datetime.timedelta(days=offset) for offset in range(-behind, ahead + 1)
+    }
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -965,7 +960,7 @@ def replace_age_in_description(description: str, check_date: datetime.date) -> s
     if match := re.search(r"\[(\d{4})\]", description):
         year_val = int(match.group(1))
         age = check_date.year - year_val
-        return re.sub(r"\[(\d{4})\]", str(age), description)
+        return description.replace(f"[{match.group(1)}]", str(age))
     return description
 
 
