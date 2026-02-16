@@ -5,6 +5,7 @@
 # dependencies = [
 #     "python-dateutil",
 #     "astronomy-engine",
+#     "lunardate",
 # ]
 # ///
 
@@ -36,6 +37,7 @@ Supported Date Formats:
     - WkdayOrd Month  (e.g., SunFirst Aug) - ordinal weekday then month
     - DD Month        (e.g., 01 Jan) - day then month name
     - Easter          Catholic Easter
+    - ChineseNewYear  First day of the Chinese year
     - Special+/-N     (e.g., Easter-2, FullMoon+1) - offset from special date
     - Weekday         (e.g., Friday) - every occurrence in the year
 
@@ -80,6 +82,11 @@ try:
     import astronomy
 except ImportError:
     sys.exit("Error: This script requires the 'astronomy-engine' package.")
+
+try:
+    from lunardate import LunarDate
+except ImportError:
+    sys.exit("Error: This script requires the 'lunardate' package.")
 
 log = logging.getLogger("pylendar")
 
@@ -756,6 +763,7 @@ def parse_special_dates(calendar_lines: list[str], year: int) -> dict[str, DateE
     date_exprs["paskha"] = SpecialDate(
         dateutil.easter.easter(year, method=dateutil.easter.EASTER_ORTHODOX)
     )
+    date_exprs["chinesenewyear"] = SpecialDate(LunarDate(year, 1, 1).toSolarDate())
 
     # Add astronomical season dates
     for name, date in get_seasons(year).items():

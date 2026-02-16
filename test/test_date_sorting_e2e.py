@@ -556,6 +556,23 @@ SunLast Jun\tLast Sunday of June
     assert result == ["Jun 28*\tLast Sunday of June"]
 
 
+def test_chinese_new_year(run_calendar):
+    """Test ChineseNewYear and offset expressions."""
+    calendar_content = """\
+ChineseNewYear\tChinese New Year
+ChineseNewYear-1\tChinese New Year's Eve
+"""
+    # Chinese New Year 2026 is February 17
+    today = datetime.date(2026, 2, 17)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Feb 17*\tChinese New Year"]
+
+    # Chinese New Year's Eve: February 16
+    today = datetime.date(2026, 2, 16)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Feb 16*\tChinese New Year's Eve"]
+
+
 def test_cli_smoke(tmp_path, monkeypatch):
     """Smoke test: invoke the CLI entry point and verify it produces expected output."""
     calendar_file = tmp_path / "calendar"

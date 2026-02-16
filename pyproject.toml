@@ -10,6 +10,7 @@ authors = [
 requires-python = ">=3.11"
 dependencies = [
     "astronomy-engine>=2.1.19",
+    "lunardate>=0.2.2",
     "python-dateutil>=2.9.0.post0",
 ]
 
@@ -34,7 +35,7 @@ dev = [
 
 [tool.ruff.lint]
 flake8-annotations.ignore-fully-untyped = true
-per-file-ignores."typings/*.pyi" = [
+per-file-ignores."typings/**/*.pyi" = [
     "N802",    # Function name should be lowercase (must match upstream API)
     "N803",    # Argument name should be lowercase (must match upstream API)
 ]

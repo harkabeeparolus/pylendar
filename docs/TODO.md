@@ -3,10 +3,6 @@
 Features missing from pylendar compared to BSD calendar(1) implementations.
 See [manpage_comparison.md](manpage_comparison.md) for full details.
 
-## Missing Special Days
-
-- **ChineseNewYear** — First day of the Chinese year (FreeBSD, macOS).
-
 ## Missing Date Format
 
 - **Bare month name** — e.g., `June\tEvery June 1st.` should match the
