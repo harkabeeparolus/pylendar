@@ -8,4 +8,3 @@ See [manpage_comparison.md](manpage_comparison.md) for full details.
 - **`-W num`** — Forward *num* days, skipping weekends (FreeBSD, macOS).
 - **`-F friday`** — Configurable "Friday" day number (FreeBSD, macOS).
   Default is 5. Affects both `-W` and the default 3-day look-ahead.
-- **`-w`** — Print day-of-week name in front of each event (OpenBSD, Debian).

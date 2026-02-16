@@ -347,7 +347,7 @@ def cli() -> None:
 
     # Sort events by date and print them
     for event in sorted(matching_events):
-        print(event)
+        print(format_event(event, weekday=args.w))
 
 
 def join_continuation_lines(lines: list[str]) -> list[str]:
@@ -398,6 +398,13 @@ class Event:
         star = "*" if self.variable else ""
         formatted_date = f"{self.date:%b} {self.date.day:2}{star}"
         return f"{formatted_date}\t{self.description}"
+
+
+def format_event(event: Event, *, weekday: bool = False) -> str:
+    """Format an event for display, optionally prepending the day-of-week name."""
+    if weekday:
+        return f"{event.date:%a} {event}"
+    return str(event)
 
 
 class DateStringParser:
@@ -873,6 +880,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Act like the specified value is 'today' instead of using the current "
         "date. If yy is specified, but cc is not, a value for yy between 69 and 99 "
         "results in a cc value of 19. Otherwise, a cc value of 20 is used.",
+    )
+    # NOTE: NetBSD uses -w for "extra Friday days" (different meaning).
+    # We follow the OpenBSD/Debian convention.
+    parser.add_argument(
+        "-w",
+        action="store_true",
+        default=False,
+        help="Print day of the week name in front of each event (OpenBSD/Debian).",
     )
     parser.add_argument(
         "--verbose",
