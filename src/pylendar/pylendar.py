@@ -292,19 +292,19 @@ class EveryWeekday(DateExpr):
         return dates
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     """Run the calendar utility."""
     setup_logging()
     try:
-        return cli()
+        return cli(argv)
     except KeyboardInterrupt:
         sys.exit("Interrupted by user.")
 
 
-def cli() -> None:
+def cli(argv: list[str] | None = None) -> None:  # pylint: disable=too-many-locals
     """Command-line interface for the calendar utility."""
     parser = build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.verbose > 0:
         logging.getLogger().setLevel(logging.DEBUG)
     else:
@@ -800,12 +800,40 @@ def parse_special_dates(calendar_lines: list[str], year: int) -> dict[str, DateE
     return date_exprs
 
 
+def _parse_dot_date(t_str: str) -> datetime.date:
+    """Parse a macOS/FreeBSD dot-separated date: dd[.mm[.year]].
+
+    Single-digit day/month values are accepted (e.g. ``5.6``).
+    Year is taken literally — no two-digit heuristic is applied.
+    """
+    parts = t_str.split(".")
+    if len(parts) < 2 or len(parts) > 3:  # noqa: PLR2004
+        msg = f"Invalid dot-separated date (expected dd.mm or dd.mm.year): {t_str}"
+        raise argparse.ArgumentTypeError(msg)
+    try:
+        dd = int(parts[0])
+        mm = int(parts[1])
+        year = int(parts[2]) if len(parts) == 3 else datetime.date.today().year  # noqa: PLR2004
+    except ValueError:
+        msg = f"Non-numeric value in dot-separated date: {t_str}"
+        raise argparse.ArgumentTypeError(msg) from None
+    try:
+        return datetime.date(year, mm, dd)
+    except ValueError:
+        msg = f"Out-of-range dot-separated date: {t_str}"
+        raise argparse.ArgumentTypeError(msg) from None
+
+
 def parse_today_arg(t_str: str) -> datetime.date:
     """Parse the -t argument and return a datetime.date object.
 
-    Acceptable formats are: dd, mmdd, yymmdd, ccyymmdd
+    Acceptable formats:
+      - OpenBSD/Debian positional: dd, mmdd, yymmdd, ccyymmdd
+      - macOS/FreeBSD dot-separated: dd.mm, dd.mm.year
     """
     t_str = t_str.strip()
+    if "." in t_str:
+        return _parse_dot_date(t_str)
     # cSpell:ignore mmdd, ccyymmdd
     if re.fullmatch(r"\d{2}", t_str):
         # dd
@@ -868,8 +896,9 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         metavar="num",
+        # FreeBSD/macOS equivalent of -A that disables Friday look-ahead.
         help="Print lines from today and next num days (forward, future). "
-        "Disables the Friday look-ahead expansion (FreeBSD, macOS).",
+        "Disables the Friday look-ahead expansion.",
     )
     parser.add_argument(
         "-B",
@@ -884,18 +913,20 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=5,
         metavar="friday",
+        # Day numbering follows BSD tm_wday convention.
         help='Set which day is "Friday" (the day before the weekend). '
-        "Uses BSD day numbering: 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat. Default 5.",
+        "Day numbering: 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat. Default 5.",
     )
     parser.add_argument(
         "-t",
-        metavar="[[[cc]yy]mm]dd",
+        metavar="date",
         type=parse_today_arg,
         default=datetime.date.today(),
         dest="today",
+        # Positional format from OpenBSD/Debian; dot-separated from macOS/FreeBSD.
         help="Act like the specified value is 'today' instead of using the current "
-        "date. If yy is specified, but cc is not, a value for yy between 69 and 99 "
-        "results in a cc value of 19. Otherwise, a cc value of 20 is used.",
+        "date. Accepts [[[cc]yy]mm]dd (if yy is between 69 and 99, cc defaults "
+        "to 19; otherwise 20) or dd.mm[.year].",
     )
     # NOTE: NetBSD uses -w for "extra Friday days" (different meaning).
     # We follow the OpenBSD/Debian convention.
@@ -903,7 +934,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-w",
         action="store_true",
         default=False,
-        help="Print day of the week name in front of each event (OpenBSD/Debian).",
+        help="Print day of the week name in front of each event.",
     )
     parser.add_argument(
         "--verbose",
