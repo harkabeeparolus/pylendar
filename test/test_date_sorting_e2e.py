@@ -430,6 +430,66 @@ Jul 4*\tIndependence Day
     assert result == ["Jul  4*\tIndependence Day"]
 
 
+def test_full_date_yyyy_slash(run_calendar):
+    """Test YYYY/M/D format from judaic calendar files."""
+    calendar_content = """\
+2026/2/17\tRosh Chodesh Adar
+2026/2/18\tRosh Chodesh Adar II
+"""
+    today = datetime.date(2026, 2, 17)
+    result = run_calendar(calendar_content, today, ahead=1)
+    assert result == [
+        "Feb 17\tRosh Chodesh Adar",
+        "Feb 18\tRosh Chodesh Adar II",
+    ]
+
+
+def test_full_date_yyyy_slash_with_asterisk(run_calendar):
+    """Test YYYY/M/D* format marks date as variable in output."""
+    calendar_content = """\
+2026/2/17*\tRosh Chodesh Adar
+"""
+    today = datetime.date(2026, 2, 17)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Feb 17*\tRosh Chodesh Adar"]
+
+
+def test_full_date_iso_format(run_calendar):
+    """Test YYYY-MM-DD ISO date format."""
+    calendar_content = """\
+2026-02-17\tISO format event
+"""
+    today = datetime.date(2026, 2, 17)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Feb 17\tISO format event"]
+
+
+def test_full_date_wrong_year_no_match(run_calendar):
+    """Test that YYYY/M/D only matches in its specific year."""
+    calendar_content = """\
+2025/2/17\tLast year's event
+"""
+    today = datetime.date(2026, 2, 17)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == []
+
+
+def test_full_date_mixed_with_mm_dd(run_calendar):
+    """Test that YYYY/M/D and MM/DD dates coexist and sort correctly."""
+    calendar_content = """\
+2026/2/18\tJudaic event
+02/17\tFixed MM/DD event
+Feb 19\tMonth DD event
+"""
+    today = datetime.date(2026, 2, 17)
+    result = run_calendar(calendar_content, today, ahead=2)
+    assert result == [
+        "Feb 17\tFixed MM/DD event",
+        "Feb 18\tJudaic event",
+        "Feb 19\tMonth DD event",
+    ]
+
+
 def test_cli_smoke(tmp_path, monkeypatch):
     """Smoke test: invoke the CLI entry point and verify it produces expected output."""
     calendar_file = tmp_path / "calendar"

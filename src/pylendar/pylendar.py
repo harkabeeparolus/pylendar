@@ -21,6 +21,8 @@ The calendar file should have one event per line, formatted as:
     <Date><TAB><Event Description>
 
 Supported Date Formats:
+    - YYYY/M/D        (e.g., 2026/2/17) - specific date with year
+    - YYYY-MM-DD      (e.g., 2026-02-17) - ISO date format
     - MM/DD           (e.g., 07/09)
     - Month DD        (e.g., Jul 9, July 9)
     - * DD            (e.g., * 9) - for the nth day of any month
@@ -125,6 +127,24 @@ class FixedDate(DateExpr):
         """Return the single date for this month/day in the given year."""
         try:
             return {datetime.date(year, self.month, self.day)}
+        except ValueError:
+            return set()
+
+
+@dataclass(frozen=True)
+class FullDate(DateExpr):
+    """A fully-specified date with year, month, and day (e.g., 2026/2/17)."""
+
+    variable: ClassVar[bool] = False
+
+    year: int
+    month: int
+    day: int
+
+    def resolve(self, year: int) -> set[datetime.date]:  # noqa: ARG002
+        """Return the single fully-specified date, ignoring the passed year."""
+        try:
+            return {datetime.date(self.year, self.month, self.day)}
         except ValueError:
             return set()
 
@@ -476,12 +496,25 @@ class DateStringParser:
             return FixedDate(int(match.group(1)), int(match.group(2)))
         return None
 
+    @staticmethod
+    def _parse_full_date(date_str: str) -> DateExpr | None:
+        """Parse YYYY/M/D or YYYY-MM-DD format (e.g., 2026/2/17, 2026-02-17)."""
+        match = re.fullmatch(r"(\d{4})[/-](\d{1,2})[/-](\d{1,2})", date_str)
+        if match:
+            return FullDate(
+                int(match.group(1)), int(match.group(2)), int(match.group(3))
+            )
+        return None
+
     def _parse_format_patterns(self, date_str: str) -> DateExpr | None:
         """Parse regex-based date format patterns."""
-        # MM/WkdayOrdinal, Month/WkdayOrdinal, or MM/DD
-        # (e.g., 10/MonSecond, Oct/SatFourth-2, 07/09)
-        if "/" in date_str:
-            return self._parse_ordinal_weekday(date_str) or self._parse_mm_dd(date_str)
+        # YYYY/M/D, YYYY-MM-DD, MM/WkdayOrdinal, Month/WkdayOrdinal, or MM/DD
+        if "/" in date_str or ("-" in date_str and date_str[0].isdigit()):
+            return (
+                self._parse_full_date(date_str)
+                or self._parse_ordinal_weekday(date_str)
+                or self._parse_mm_dd(date_str)
+            )
 
         # Month Weekday+/-N (e.g., May Sun+2, Nov Thu+4, May Mon-1)
         # Must precede Month DD so "May Sun+2" isn't partially matched
