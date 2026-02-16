@@ -60,9 +60,15 @@ python_version = "3.11"
 mypy_path = "typings"
 strict = true
 
+[tool.ty.rules]
+# TODO: remove once ty detects the override error in OffsetDateExpr.variable
+# (mypy requires `type: ignore[override]` there, but ty considers it unused)
+unused-type-ignore-comment = "ignore"
+
 [tool.pylint]
 main.py-version = "3.11"
 main.jobs = 0                       # 0 means all available cores
+design.max-module-lines = 1100      # single-file design is intentional
 reports.output-format = "colorized"
 
 [tool.pylint."messages control"]

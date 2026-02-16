@@ -111,7 +111,7 @@ ORDINAL_MAP: dict[str, int] = {
 }
 
 
-class DateExpr(ABC):
+class DateExpr(ABC):  # pylint: disable=too-few-public-methods
     """A date expression that resolves to concrete dates for a given year."""
 
     variable: ClassVar[bool] = True
