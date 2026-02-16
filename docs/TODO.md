@@ -3,12 +3,6 @@
 Features missing from pylendar compared to BSD calendar(1) implementations.
 See [manpage_comparison.md](manpage_comparison.md) for full details.
 
-## Missing Date Format
-
-- **Bare month name** — e.g., `June\tEvery June 1st.` should match the
-  1st of that month. All four BSDs support this. The parser handles bare
-  weekday names but not bare month names.
-
 ## Missing CLI Flags
 
 - **`-W num`** — Forward *num* days, skipping weekends (FreeBSD, macOS).

@@ -40,6 +40,7 @@ Supported Date Formats:
     - ChineseNewYear  First day of the Chinese year
     - Special+/-N     (e.g., Easter-2, FullMoon+1) - offset from special date
     - Weekday         (e.g., Friday) - every occurrence in the year
+    - Month           (e.g., June) - the 1st of that month
 
 Example calendar file (save as 'calendar'):
 #------------------------------------------
@@ -468,6 +469,10 @@ class DateStringParser:
         # Standalone weekday (e.g., Friday) — checked before regex
         if date_str in self.weekday_map:
             return EveryWeekday(self.weekday_map[date_str])
+
+        # Standalone month name (e.g., June) — matches the 1st of that month
+        if date_str in self.month_map:
+            return FixedDate(self.month_map[date_str], 1)
 
         return self._parse_format_patterns(date_str)
 

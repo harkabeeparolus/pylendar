@@ -573,6 +573,26 @@ ChineseNewYear-1\tChinese New Year's Eve
     assert result == ["Feb 16*\tChinese New Year's Eve"]
 
 
+def test_bare_month_name(run_calendar):
+    """Test bare month name matches the 1st of that month."""
+    calendar_content = """\
+June\tEvery June 1st
+Jun\tAlso June 1st (abbreviation)
+"""
+    # June 1st should match both entries
+    today = datetime.date(2026, 6, 1)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == [
+        "Jun  1\tEvery June 1st",
+        "Jun  1\tAlso June 1st (abbreviation)",
+    ]
+
+    # June 2nd — no match
+    today = datetime.date(2026, 6, 2)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == []
+
+
 def test_cli_smoke(tmp_path, monkeypatch):
     """Smoke test: invoke the CLI entry point and verify it produces expected output."""
     calendar_file = tmp_path / "calendar"
