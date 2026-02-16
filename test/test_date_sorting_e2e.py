@@ -104,54 +104,6 @@ def test_events_with_wildcards_sorted_correctly(run_calendar):
     assert result == expected
 
 
-def test_default_date_range_sorting(run_calendar):
-    """Test sorting with default date range (uses get_ahead_behind logic)."""
-    calendar_content = """# Calendar with today and tomorrow events
-08/29\tToday's event
-08/30\tTomorrow's event
-08/31\tDay after tomorrow (should not show)
-08/28\tYesterday (should not show)
-"""
-
-    # Test with default parameters - should use get_ahead_behind() logic
-    # Thursday (Aug 29, 2024) should default to ahead=1, behind=0
-    today = datetime.date(2024, 8, 29)  # Thursday
-    result = run_calendar(calendar_content, today)  # Uses defaults
-
-    # Should only show today (Aug 29) and tomorrow (Aug 30)
-    expected = [
-        "Aug 29\tToday's event",
-        "Aug 30\tTomorrow's event",
-    ]
-
-    assert result == expected
-
-
-def test_weekend_date_range_sorting(run_calendar):
-    """Test sorting with weekend behavior (Friday default of 3 days ahead)."""
-    calendar_content = """# Weekend calendar events
-07/12\tFriday event
-07/13\tSaturday event
-07/14\tSunday event
-07/15\tMonday event
-07/16\tTuesday event (should not show with Friday default)
-"""
-
-    # Test on Friday - should use get_ahead_behind() default of 3 days ahead
-    today = datetime.date(2024, 7, 12)  # Friday
-    result = run_calendar(calendar_content, today)  # Uses Friday default
-
-    # Should show Fri-Mon events in chronological order (Friday default: ahead=3)
-    expected = [
-        "Jul 12\tFriday event",
-        "Jul 13\tSaturday event",
-        "Jul 14\tSunday event",
-        "Jul 15\tMonday event",
-    ]
-
-    assert result == expected
-
-
 def test_friday_vs_weekday_default_behavior(run_calendar):
     """Test that Friday and weekday use different default ahead values."""
     calendar_content = """# Events to test default behavior differences
@@ -488,6 +440,103 @@ Feb 19\tMonth DD event
         "Feb 18\tJudaic event",
         "Feb 19\tMonth DD event",
     ]
+
+
+def test_dd_month_format(run_calendar):
+    """Test DD Month format (e.g., 01 Jan, 21 Apr)."""
+    calendar_content = """\
+01 Jan\tNew Year's Day
+"""
+    today = datetime.date(2026, 1, 1)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Jan  1\tNew Year's Day"]
+
+
+def test_dd_month_mixed_with_month_dd(run_calendar):
+    """Test DD Month and Month DD formats coexist and sort correctly."""
+    calendar_content = """\
+01 Jan\tDD Month format
+Jan 02\tMonth DD format
+"""
+    today = datetime.date(2026, 1, 1)
+    result = run_calendar(calendar_content, today, ahead=1)
+    assert result == [
+        "Jan  1\tDD Month format",
+        "Jan  2\tMonth DD format",
+    ]
+
+
+def test_month_slash_dd_format(run_calendar):
+    """Test Month/DD format (e.g., apr/01, dec/07)."""
+    calendar_content = """\
+apr/01\tApril Fools
+dec/07\tPearl Harbor Day
+jan/06\tEpiphany
+"""
+    today = datetime.date(2026, 4, 1)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Apr  1\tApril Fools"]
+
+
+def test_month_slash_dd_with_ordinal(run_calendar):
+    """Test Month/DD and Month/WkdayOrdinal formats don't conflict."""
+    calendar_content = """\
+apr/01\tApril Fools
+Apr/SunFirst\tFirst Sunday of April
+"""
+    # First Sunday of April 2026 is Apr 5
+    today = datetime.date(2026, 4, 1)
+    result = run_calendar(calendar_content, today, ahead=5)
+    assert result == [
+        "Apr  1\tApril Fools",
+        "Apr  5*\tFirst Sunday of April",
+    ]
+
+
+def test_mm_wkday_offset_format(run_calendar):
+    """Test MM/Weekday+/-N format (e.g., 03/Sun-1, 11/Wed+3, 12/Sun+1)."""
+    calendar_content = """\
+03/Sun-1\tLast Sunday of March
+11/Wed+3\tThird Wednesday of November
+12/Sun+1\tFirst Sunday of December
+"""
+    # Last Sunday of March 2026: Mar 29
+    today = datetime.date(2026, 3, 29)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Mar 29*\tLast Sunday of March"]
+
+    # 3rd Wednesday of November 2026: Nov 18
+    today = datetime.date(2026, 11, 18)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Nov 18*\tThird Wednesday of November"]
+
+    # 1st Sunday of December 2026: Dec 6
+    today = datetime.date(2026, 12, 6)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Dec  6*\tFirst Sunday of December"]
+
+
+def test_wkday_ord_month_format(run_calendar):
+    """Test WkdayOrd Month format (e.g., SunFirst Aug, SunThird Jul)."""
+    calendar_content = """\
+SunFirst Aug\tFirst Sunday of August
+SunThird Jul\tThird Sunday of July
+SunLast Jun\tLast Sunday of June
+"""
+    # First Sunday of August 2026: Aug 2
+    today = datetime.date(2026, 8, 2)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Aug  2*\tFirst Sunday of August"]
+
+    # Third Sunday of July 2026: Jul 19
+    today = datetime.date(2026, 7, 19)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Jul 19*\tThird Sunday of July"]
+
+    # Last Sunday of June 2026: Jun 28
+    today = datetime.date(2026, 6, 28)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Jun 28*\tLast Sunday of June"]
 
 
 def test_cli_smoke(tmp_path, monkeypatch):

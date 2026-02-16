@@ -28,9 +28,13 @@ Supported Date Formats:
     - * DD            (e.g., * 9) - for the nth day of any month
     - Month Wkday+N   (e.g., May Sun+2) - Nth weekday of a month
     - Month Wkday-N   (e.g., May Mon-1) - last Nth weekday of a month
+    - MM/Wkday+N      (e.g., 03/Sun-1) - Nth weekday of numbered month
     - MM/WkdayOrd     (e.g., 10/MonSecond) - Nth weekday using ordinal
     - Month/WkdayOrd  (e.g., Oct/SatFourth-2) - with optional day offset
+    - Month/DD        (e.g., apr/01) - month name with slash
     - * Wkday+N       (e.g., * Fri+3) - Nth weekday of every month
+    - WkdayOrd Month  (e.g., SunFirst Aug) - ordinal weekday then month
+    - DD Month        (e.g., 01 Jan) - day then month name
     - Easter          Catholic Easter
     - Special+/-N     (e.g., Easter-2, FullMoon+1) - offset from special date
     - Weekday         (e.g., Friday) - every occurrence in the year
@@ -506,18 +510,29 @@ class DateStringParser:
             )
         return None
 
-    def _parse_format_patterns(self, date_str: str) -> DateExpr | None:
-        """Parse regex-based date format patterns."""
-        # YYYY/M/D, YYYY-MM-DD, MM/WkdayOrdinal, Month/WkdayOrdinal, or MM/DD
-        if "/" in date_str or ("-" in date_str and date_str[0].isdigit()):
-            return (
-                self._parse_full_date(date_str)
-                or self._parse_ordinal_weekday(date_str)
-                or self._parse_mm_dd(date_str)
-            )
+    def _parse_month_slash_dd(self, date_str: str) -> DateExpr | None:
+        """Parse Month/DD format (e.g., apr/01, dec/07, jan/06)."""
+        match = re.fullmatch(r"([a-z]+)/(\d{1,2})", date_str)
+        if match:
+            month_name = match.group(1)
+            if month_name in self.month_map:
+                return FixedDate(self.month_map[month_name], int(match.group(2)))
+        return None
 
-        # Month Weekday+/-N (e.g., May Sun+2, Nov Thu+4, May Mon-1)
-        # Must precede Month DD so "May Sun+2" isn't partially matched
+    def _parse_mm_wkday_offset(self, date_str: str) -> DateExpr | None:
+        """Parse MM/Weekday+/-N format (e.g., 03/Sun-1, 11/Wed+3, 12/Sun+1)."""
+        match = re.fullmatch(r"(\d{1,2})/([a-z]+)([+-])(\d+)", date_str)
+        if match:
+            month = int(match.group(1))
+            wkday_name = match.group(2)
+            if wkday_name in self.weekday_map:
+                sign = 1 if match.group(3) == "+" else -1
+                n = sign * int(match.group(4))
+                return NthWeekdayOfMonth(month, self.weekday_map[wkday_name], n)
+        return None
+
+    def _parse_month_wkday_offset(self, date_str: str) -> DateExpr | None:
+        """Parse Month Weekday+/-N format (e.g., May Sun+2, Nov Thu+4, May Mon-1)."""
         match = re.fullmatch(r"([a-z]+)\s+([a-z]+)([+-])(\d+)", date_str)
         if match:
             month_name, wkday_name = match.group(1), match.group(2)
@@ -529,15 +544,19 @@ class DateStringParser:
                     self.weekday_map[wkday_name],
                     n,
                 )
+        return None
 
-        # Month DD (e.g., July 9 or Jul 9)
+    def _parse_month_dd(self, date_str: str) -> DateExpr | None:
+        """Parse Month DD format (e.g., July 9, Jul 9)."""
         match = re.fullmatch(r"([a-z]{3,24})\s+(\d{1,2})", date_str)
         if match:
             month_name = match.group(1)
             if month_name in self.month_map:
                 return FixedDate(self.month_map[month_name], int(match.group(2)))
+        return None
 
-        # * Weekday+/-N (e.g., * Fri+3) — must precede * DD
+    def _parse_wildcard_wkday(self, date_str: str) -> DateExpr | None:
+        """Parse * Weekday+/-N format (e.g., * Fri+3)."""
         match = re.fullmatch(r"\*\s+([a-z]+)([+-])(\d+)", date_str)
         if match:
             wkday_name = match.group(1)
@@ -545,13 +564,63 @@ class DateStringParser:
             n = sign * int(match.group(3))
             if wkday_name in self.weekday_map:
                 return NthWeekdayEveryMonth(self.weekday_map[wkday_name], n)
+        return None
 
-        # * DD (e.g., * 9)
+    @staticmethod
+    def _parse_wildcard_day(date_str: str) -> DateExpr | None:
+        """Parse * DD format (e.g., * 9)."""
         match = re.fullmatch(r"\*\s+(\d{1,2})", date_str)
         if match:
             return WildcardDay(int(match.group(1)))
-
         return None
+
+    def _parse_wkday_ord_month(self, date_str: str) -> DateExpr | None:
+        """Parse WkdayOrd Month format (e.g., SunFirst Aug, SunThird Jul)."""
+        ordinals = "|".join(ORDINAL_MAP)
+        match = re.fullmatch(rf"([a-z]+)({ordinals})\s+([a-z]+)", date_str)
+        if match:
+            wkday_name = match.group(1)
+            month_name = match.group(3)
+            if wkday_name in self.weekday_map and month_name in self.month_map:
+                n = ORDINAL_MAP[match.group(2)]
+                return NthWeekdayOfMonth(
+                    self.month_map[month_name],
+                    self.weekday_map[wkday_name],
+                    n,
+                )
+        return None
+
+    def _parse_dd_month(self, date_str: str) -> DateExpr | None:
+        """Parse DD Month format (e.g., 01 Jan, 21 Apr)."""
+        match = re.fullmatch(r"(\d{1,2})\s+([a-z]+)", date_str)
+        if match:
+            month_name = match.group(2)
+            if month_name in self.month_map:
+                return FixedDate(self.month_map[month_name], int(match.group(1)))
+        return None
+
+    def _parse_format_patterns(self, date_str: str) -> DateExpr | None:
+        """Parse regex-based date format patterns."""
+        # YYYY/M/D, YYYY-MM-DD, MM/Wkday+N, MM/WkdayOrd, Month/WkdayOrd,
+        # Month/DD, or MM/DD
+        if "/" in date_str or ("-" in date_str and date_str[0].isdigit()):
+            return (
+                self._parse_full_date(date_str)
+                or self._parse_mm_wkday_offset(date_str)
+                or self._parse_ordinal_weekday(date_str)
+                or self._parse_month_slash_dd(date_str)
+                or self._parse_mm_dd(date_str)
+            )
+
+        # Non-slash patterns, tried most-specific first
+        return (
+            self._parse_month_wkday_offset(date_str)
+            or self._parse_month_dd(date_str)
+            or self._parse_wildcard_wkday(date_str)
+            or self._parse_wildcard_day(date_str)
+            or self._parse_wkday_ord_month(date_str)
+            or self._parse_dd_month(date_str)
+        )
 
 
 def remove_comments(code: str) -> str:

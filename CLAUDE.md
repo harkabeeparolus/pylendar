@@ -20,6 +20,8 @@ uv run ty check          # type checking
 uv run pylendar          # run pylendar CLI
 ```
 
+There is test data from FreeBSD default calendar files in the `calendars/` subdirectory.
+
 ## Architecture
 
 The codebase is intentionally a single file (`src/pylendar/pylendar.py`, ~600 lines) so it could be used as a standalone script in the future, via PEP 723 inline script metadata. But during development we build it as a normal Python package.
