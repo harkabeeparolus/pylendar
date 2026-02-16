@@ -408,6 +408,28 @@ Oct/SatFourth-2\tHobart Show Day (TAS)
     assert result == ["Oct 22*\tHobart Show Day (TAS)"]
 
 
+def test_trailing_asterisk_mm_dd(run_calendar):
+    """Test that trailing * on MM/DD marks a fixed date as variable in output."""
+    calendar_content = """\
+07/04*\tIndependence Day
+07/04\tAlso Independence Day
+"""
+    today = datetime.date(2024, 7, 4)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert "Jul  4*\tIndependence Day" in result
+    assert "Jul  4\tAlso Independence Day" in result
+
+
+def test_trailing_asterisk_month_dd(run_calendar):
+    """Test that trailing * on Month DD marks a fixed date as variable in output."""
+    calendar_content = """\
+Jul 4*\tIndependence Day
+"""
+    today = datetime.date(2024, 7, 4)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Jul  4*\tIndependence Day"]
+
+
 def test_cli_smoke(tmp_path, monkeypatch):
     """Smoke test: invoke the CLI entry point and verify it produces expected output."""
     calendar_file = tmp_path / "calendar"

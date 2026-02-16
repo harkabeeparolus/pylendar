@@ -819,6 +819,9 @@ def get_matching_event(
         return None
 
     date_str, event_description = line.split("\t", 1)
+    explicit_variable = date_str.rstrip().endswith("*")
+    if explicit_variable:
+        date_str = date_str.rstrip()[:-1]
     expr = parser.parse(date_str)
     if expr is None:
         return None
@@ -832,7 +835,7 @@ def get_matching_event(
     if matching:
         check_date = min(matching)
         desc = replace_age_in_description(event_description, check_date)
-        return Event(check_date, desc, variable=expr.variable)
+        return Event(check_date, desc, variable=explicit_variable or expr.variable)
     return None
 
 
