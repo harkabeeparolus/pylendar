@@ -68,6 +68,20 @@ def test_format_event_unit():
     assert format_event(event, weekday=True) == "Mon Feb 16\tPresident's Day"
 
 
+def test_weekday_flag_multiline(run_calendar):
+    """Test that -w aligns continuation lines with the first line."""
+    calendar_content = """\
+02/16\tPluie de février
+\tÀ la terre vaut du fumier.
+"""
+    today = datetime.date(2026, 2, 16)
+    result = run_calendar(calendar_content, today, ahead=0, weekday=True)
+
+    assert result == [
+        "Mon Feb 16\tPluie de février\n          \tÀ la terre vaut du fumier.",
+    ]
+
+
 def test_cli_weekday_flag(tmp_path, monkeypatch):
     """Smoke test: invoke the CLI with -w and verify weekday names appear."""
     calendar_file = tmp_path / "calendar"

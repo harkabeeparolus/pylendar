@@ -408,7 +408,10 @@ class Event:
 def format_event(event: Event, *, weekday: bool = False) -> str:
     """Format an event for display, optionally prepending the day-of-week name."""
     if weekday:
-        return f"{event.date:%a} {event}"
+        prefix = f"{event.date:%a} "
+        event_str = str(event)
+        pad = " " * (len(prefix) + event_str.index("\t"))
+        return prefix + event_str.replace("\n", "\n" + pad)
     return str(event)
 
 
