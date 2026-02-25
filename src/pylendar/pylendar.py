@@ -301,7 +301,7 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit("Interrupted by user.")
 
 
-def cli(argv: list[str] | None = None) -> None:  # pylint: disable=too-many-locals
+def cli(argv: list[str] | None = None) -> None:
     """Command-line interface for the calendar utility."""
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -325,49 +325,70 @@ def cli(argv: list[str] | None = None) -> None:  # pylint: disable=too-many-loca
         print_diagnostic(args.D, args.today.year, utc_offset, longitude)
         return
 
-    calendar_lines = []
     calendar_path = (
         Path(args.file) if args.file else find_calendar(DEFAULT_CALENDAR_PATHS)
     )
     if not calendar_path.is_file():
         log.debug(f"Calendar file '{calendar_path}' not found, exiting...")
         return
-    processor = SimpleCPP(include_dirs=DEFAULT_CALENDAR_PATHS)
-    try:
-        calendar_lines = processor.process_file(calendar_path)
-    except (OSError, SyntaxError) as e:
-        sys.exit(f"Error: Could not read calendar file: {e}")
-    calendar_lines = join_continuation_lines(calendar_lines)
 
     friday = bsd_to_python_weekday(args.F)
     ahead_value = args.W if args.W is not None else args.A
-    ahead, behind = get_ahead_behind(
-        args.today, ahead=ahead_value, behind=args.B, friday=friday
+    try:
+        lines = process_calendar(
+            calendar_path,
+            args.today,
+            ahead=ahead_value,
+            behind=args.B,
+            friday=friday,
+            weekday=args.w,
+            utc_offset_hours=utc_offset,
+            include_dirs=DEFAULT_CALENDAR_PATHS,
+        )
+    except (OSError, SyntaxError) as e:
+        sys.exit(f"Error: Could not read calendar file: {e}")
+
+    for line in lines:
+        print(line)
+
+
+def process_calendar(  # noqa: PLR0913  # pylint: disable=too-many-arguments,too-many-locals
+    calendar_path: Path,
+    today: datetime.date,
+    ahead: int | None = None,
+    behind: int = 0,
+    *,
+    friday: int = 4,
+    weekday: bool = False,
+    utc_offset_hours: float = 0,
+    include_dirs: Sequence[Path] | None = None,
+) -> list[str]:
+    """Process a calendar file and return formatted event strings.
+
+    This is the core pipeline shared by ``cli()`` and test fixtures.
+    """
+    processor = SimpleCPP(include_dirs=include_dirs or [])
+    calendar_lines = join_continuation_lines(processor.process_file(calendar_path))
+
+    ahead_days, behind_days = get_ahead_behind(
+        today, ahead=ahead, behind=behind, friday=friday
     )
-    dates_to_check = get_dates_to_check(args.today, ahead=ahead, behind=behind)
-
-    # Parse special dates and aliases once
-    date_exprs = parse_special_dates(calendar_lines, args.today.year, utc_offset)
-
-    # Create a DateStringParser instance with date expressions
+    dates_to_check = get_dates_to_check(today, ahead=ahead_days, behind=behind_days)
+    date_exprs = parse_special_dates(calendar_lines, today.year, utc_offset_hours)
     date_parser = DateStringParser(date_exprs)
 
     log.debug(f"File path = {calendar_path}")
-    log.debug(f"Today is {args.today}")
-    log.debug(f"Ahead = {ahead}, Behind = {behind}")
+    log.debug(f"Today is {today}")
+    log.debug(f"Ahead = {ahead_days}, Behind = {behind_days}")
     log.debug(f"dates_to_check = {dates_to_check}")
     log.debug(f"date_exprs = {date_exprs}")
 
-    # Collect calendar events matching any of the current dates
     matching_events = [
         event
         for line in calendar_lines
         if (event := get_matching_event(line, dates_to_check, date_parser))
     ]
-
-    # Sort events by date and print them
-    for event in sorted(matching_events):
-        print(format_event(event, weekday=args.w))
+    return [format_event(event, weekday=weekday) for event in sorted(matching_events)]
 
 
 def join_continuation_lines(lines: list[str]) -> list[str]:
@@ -754,71 +775,12 @@ def get_seasons(year: int, utc_offset_hours: float = 0) -> dict[str, datetime.da
         dict mapping season names to their dates
 
     """
-    seasons = astronomy.Seasons(year)
-    offset = datetime.timedelta(hours=utc_offset_hours)
     return {
-        "marequinox": (seasons.mar_equinox.Utc() + offset).date(),
-        "junsolstice": (seasons.jun_solstice.Utc() + offset).date(),
-        "sepequinox": (seasons.sep_equinox.Utc() + offset).date(),
-        "decsolstice": (seasons.dec_solstice.Utc() + offset).date(),
+        name: dt.date() for name, dt in _get_season_datetimes(year, utc_offset_hours)
     }
 
 
-def get_moon_phases(
-    year: int, utc_offset_hours: float = 0
-) -> dict[str, set[datetime.date]]:
-    """Get all new and full moon dates for a given year.
-
-    Returns:
-        dict mapping "newmoon" and "fullmoon" to sets of dates
-
-    """
-    moon_phases: dict[str, set[datetime.date]] = {"newmoon": set(), "fullmoon": set()}
-    start_time = astronomy.Time.Make(year, 1, 1, 0, 0, 0)
-    offset = datetime.timedelta(hours=utc_offset_hours)
-
-    for phase_name, phase_angle in [("newmoon", 0), ("fullmoon", 180)]:
-        search_time = start_time
-        while True:
-            moon_phase = astronomy.SearchMoonPhase(phase_angle, search_time, 40)
-            if moon_phase is None:
-                break
-            phase_date = (moon_phase.Utc() + offset).date()
-            if phase_date.year != year:
-                break
-            moon_phases[phase_name].add(phase_date)
-            search_time = astronomy.Time.AddDays(moon_phase, 1)
-
-    return moon_phases
-
-
-def _fractional_day_of_year(dt: datetime.datetime) -> float:
-    """Return the fractional day-of-year for a datetime (1-based, like tm_yday)."""
-    jan1 = datetime.datetime(dt.year, 1, 1)
-    elapsed = dt - jan1
-    return elapsed.total_seconds() / 86400 + 1
-
-
-def _format_frac(value: float) -> str:
-    """Format a float with ~6 significant figures, like BSD %g."""
-    return f"{value:.6g}"
-
-
-def _get_season_datetimes(
-    year: int, utc_offset_hours: float
-) -> list[tuple[str, datetime.datetime]]:
-    """Return equinox/solstice datetimes with UTC offset applied."""
-    seasons = astronomy.Seasons(year)
-    offset = datetime.timedelta(hours=utc_offset_hours)
-    return [
-        ("e[0]", seasons.mar_equinox.Utc() + offset),
-        ("e[1]", seasons.sep_equinox.Utc() + offset),
-        ("s[0]", seasons.jun_solstice.Utc() + offset),
-        ("s[1]", seasons.dec_solstice.Utc() + offset),
-    ]
-
-
-def _get_moon_phase_datetimes(
+def _search_moon_phases(
     year: int, phase_angle: int, utc_offset_hours: float
 ) -> list[datetime.datetime]:
     """Return all moon phase datetimes for a year with UTC offset applied."""
@@ -838,34 +800,75 @@ def _get_moon_phase_datetimes(
     return results
 
 
-def print_diagnostic(
-    mode: str, year: int, utc_offset: float, longitude: float
-) -> None:
+def get_moon_phases(
+    year: int, utc_offset_hours: float = 0
+) -> dict[str, set[datetime.date]]:
+    """Get all new and full moon dates for a given year.
+
+    Returns:
+        dict mapping "newmoon" and "fullmoon" to sets of dates
+
+    """
+    return {
+        name: {dt.date() for dt in _search_moon_phases(year, angle, utc_offset_hours)}
+        for name, angle in [("newmoon", 0), ("fullmoon", 180)]
+    }
+
+
+def _fractional_day_of_year(dt: datetime.datetime) -> float:
+    """Return the fractional day-of-year for a datetime (1-based, like tm_yday)."""
+    jan1 = datetime.datetime(dt.year, 1, 1)
+    elapsed = dt - jan1
+    return elapsed.total_seconds() / 86400 + 1
+
+
+def _format_frac(value: float) -> str:
+    """Format a float with ~6 significant figures, like BSD %g."""
+    return f"{value:.6g}"
+
+
+def _get_season_datetimes(
+    year: int, utc_offset_hours: float
+) -> list[tuple[str, datetime.datetime]]:
+    """Return equinox/solstice datetimes with UTC offset applied.
+
+    Returns (keyword, datetime) pairs using calendar keyword names.
+    """
+    seasons = astronomy.Seasons(year)
+    offset = datetime.timedelta(hours=utc_offset_hours)
+    return [
+        ("marequinox", seasons.mar_equinox.Utc() + offset),
+        ("sepequinox", seasons.sep_equinox.Utc() + offset),
+        ("junsolstice", seasons.jun_solstice.Utc() + offset),
+        ("decsolstice", seasons.dec_solstice.Utc() + offset),
+    ]
+
+
+def print_diagnostic(mode: str, year: int, utc_offset: float, longitude: float) -> None:
     """Print diagnostic sun or moon information, then return."""
     print(f"UTCOffset: {_format_frac(utc_offset)}")
     print(f"eastlongitude: {_format_frac(longitude)}")
 
+    _diag_labels = {
+        "marequinox": "e[0]",
+        "sepequinox": "e[1]",
+        "junsolstice": "s[0]",
+        "decsolstice": "s[1]",
+    }
     if mode == "sun":
         print(f"Sun in {year}:")
-        for label, dt in _get_season_datetimes(year, utc_offset):
+        for name, dt in _get_season_datetimes(year, utc_offset):
             frac = _fractional_day_of_year(dt)
             ts = dt.strftime("%m-%d %H:%M:%S")
-            print(f"{label} - {_format_frac(frac)} ({ts})")
+            print(f"{_diag_labels[name]} - {_format_frac(frac)} ({ts})")
     else:
-        full_dts = _get_moon_phase_datetimes(year, 180, utc_offset)
-        new_dts = _get_moon_phase_datetimes(year, 0, utc_offset)
-        entries = []
-        for dt in full_dts:
-            frac = _fractional_day_of_year(dt)
-            ts = dt.strftime("%m-%d %H:%M:%S")
-            entries.append(f"{_format_frac(frac)} ({ts})")
-        print(f"Full moon {year}:\t" + " ".join(entries))
-        entries = []
-        for dt in new_dts:
-            frac = _fractional_day_of_year(dt)
-            ts = dt.strftime("%m-%d %H:%M:%S")
-            entries.append(f"{_format_frac(frac)} ({ts})")
-        print(f"New moon {year}:\t" + " ".join(entries))
+        for label, angle in [("Full moon", 180), ("New moon", 0)]:
+            dts = _search_moon_phases(year, angle, utc_offset)
+            entries = " ".join(
+                f"{_format_frac(_fractional_day_of_year(dt))} ({dt:%m-%d %H:%M:%S})"
+                for dt in dts
+            )
+            print(f"{label} {year}:\t{entries}")
 
 
 def parse_special_dates(
