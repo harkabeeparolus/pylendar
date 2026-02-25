@@ -334,17 +334,16 @@ def cli(argv: list[str] | None = None) -> None:
 
     friday = bsd_to_python_weekday(args.F)
     ahead_value = args.W if args.W is not None else args.A
+    opts = CalendarOptions(
+        ahead=ahead_value,
+        behind=args.B,
+        friday=friday,
+        weekday=args.w,
+        utc_offset_hours=utc_offset,
+        include_dirs=DEFAULT_CALENDAR_PATHS,
+    )
     try:
-        lines = process_calendar(
-            calendar_path,
-            args.today,
-            ahead=ahead_value,
-            behind=args.B,
-            friday=friday,
-            weekday=args.w,
-            utc_offset_hours=utc_offset,
-            include_dirs=DEFAULT_CALENDAR_PATHS,
-        )
+        lines = process_calendar(calendar_path, args.today, opts)
     except (OSError, SyntaxError) as e:
         sys.exit(f"Error: Could not read calendar file: {e}")
 
@@ -352,29 +351,36 @@ def cli(argv: list[str] | None = None) -> None:
         print(line)
 
 
-def process_calendar(  # noqa: PLR0913  # pylint: disable=too-many-arguments,too-many-locals
+@dataclass
+class CalendarOptions:
+    """Options for calendar processing."""
+
+    ahead: int | None = None
+    behind: int = 0
+    friday: int = 4
+    weekday: bool = False
+    utc_offset_hours: float = 0
+    include_dirs: Sequence[Path] = ()
+
+
+def process_calendar(
     calendar_path: Path,
     today: datetime.date,
-    ahead: int | None = None,
-    behind: int = 0,
-    *,
-    friday: int = 4,
-    weekday: bool = False,
-    utc_offset_hours: float = 0,
-    include_dirs: Sequence[Path] | None = None,
+    options: CalendarOptions | None = None,
 ) -> list[str]:
     """Process a calendar file and return formatted event strings.
 
     This is the core pipeline shared by ``cli()`` and test fixtures.
     """
-    processor = SimpleCPP(include_dirs=include_dirs or [])
+    opts = options or CalendarOptions()
+    processor = SimpleCPP(include_dirs=opts.include_dirs)
     calendar_lines = join_continuation_lines(processor.process_file(calendar_path))
 
     ahead_days, behind_days = get_ahead_behind(
-        today, ahead=ahead, behind=behind, friday=friday
+        today, ahead=opts.ahead, behind=opts.behind, friday=opts.friday
     )
     dates_to_check = get_dates_to_check(today, ahead=ahead_days, behind=behind_days)
-    date_exprs = parse_special_dates(calendar_lines, today.year, utc_offset_hours)
+    date_exprs = parse_special_dates(calendar_lines, today.year, opts.utc_offset_hours)
     date_parser = DateStringParser(date_exprs)
 
     log.debug(f"File path = {calendar_path}")
@@ -388,7 +394,9 @@ def process_calendar(  # noqa: PLR0913  # pylint: disable=too-many-arguments,too
         for line in calendar_lines
         if (event := get_matching_event(line, dates_to_check, date_parser))
     ]
-    return [format_event(event, weekday=weekday) for event in sorted(matching_events)]
+    return [
+        format_event(event, weekday=opts.weekday) for event in sorted(matching_events)
+    ]
 
 
 def join_continuation_lines(lines: list[str]) -> list[str]:
