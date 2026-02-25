@@ -72,7 +72,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, TypeAlias
+from typing import ClassVar, Self, TypeAlias
 
 try:
     import dateutil.easter
@@ -131,35 +131,19 @@ class DateExpr(ABC):  # pylint: disable=too-few-public-methods
 
 @dataclass(frozen=True)
 class FixedDate(DateExpr):
-    """A fixed month/day (e.g., 07/04, Jul 4)."""
+    """A fixed month/day, optionally pinned to a specific year."""
 
     variable: ClassVar[bool] = False
 
     month: int
     day: int
+    year: int | None = None
 
     def resolve(self, year: int) -> DateSet:
-        """Return the single date for this month/day in the given year."""
+        """Return the single date, using the stored year if present."""
         try:
-            return {datetime.date(year, self.month, self.day)}
-        except ValueError:
-            return set()
-
-
-@dataclass(frozen=True)
-class FullDate(DateExpr):
-    """A fully-specified date with year, month, and day (e.g., 2026/2/17)."""
-
-    variable: ClassVar[bool] = False
-
-    year: int
-    month: int
-    day: int
-
-    def resolve(self, year: int) -> DateSet:  # noqa: ARG002
-        """Return the single fully-specified date, ignoring the passed year."""
-        try:
-            return {datetime.date(self.year, self.month, self.day)}
+            y = self.year if self.year is not None else year
+            return {datetime.date(y, self.month, self.day)}
         except ValueError:
             return set()
 
@@ -182,21 +166,15 @@ class WildcardDay(DateExpr):
 
 
 @dataclass(frozen=True)
-class SpecialDate(DateExpr):
-    """A pre-resolved single-occurrence date (Easter, equinox, etc.)."""
-
-    date: datetime.date
-
-    def resolve(self, year: int) -> DateSet:  # noqa: ARG002
-        """Return the pre-resolved date."""
-        return {self.date}
-
-
-@dataclass(frozen=True)
-class RecurringDate(DateExpr):
-    """A set of pre-resolved recurring dates (full moons, new moons, etc.)."""
+class ResolvedDate(DateExpr):
+    """A pre-resolved date or set of dates (Easter, equinoxes, moon phases, etc.)."""
 
     dates: frozenset[datetime.date]
+
+    @classmethod
+    def of(cls, *dates: datetime.date) -> Self:
+        """Create from one or more individual dates."""
+        return cls(frozenset(dates))
 
     def resolve(self, year: int) -> DateSet:  # noqa: ARG002
         """Return all pre-resolved dates."""
@@ -312,16 +290,7 @@ def cli(argv: list[str] | None = None) -> None:
     else:
         logging.getLogger().setLevel(logging.INFO)
 
-    # Resolve UTC offset and longitude
-    if args.U is not None:
-        utc_offset = args.U
-        longitude = args.l if args.l is not None else utc_offset * 15
-    elif args.l is not None:
-        utc_offset = args.l / 15
-        longitude = args.l
-    else:
-        utc_offset = get_utc_offset_hours()
-        longitude = utc_offset * 15
+    utc_offset, longitude = resolve_coordinates(args.U, args.l)
 
     if args.D is not None:
         print_diagnostic(args.D, args.today.year, utc_offset, longitude)
@@ -461,6 +430,12 @@ def format_event(event: Event, *, weekday: bool = False) -> str:
     return str(event)
 
 
+def _parse_signed_int(match: re.Match[str], sign_group: int, value_group: int) -> int:
+    """Extract a signed integer from regex match groups ('+', '3' → 3)."""
+    sign = 1 if match.group(sign_group) == "+" else -1
+    return sign * int(match.group(value_group))
+
+
 class DateStringParser:
     """Parser for date strings from calendar files."""
 
@@ -518,8 +493,7 @@ class DateStringParser:
         # Must precede plain special-date lookup
         match = re.fullmatch(r"([a-z]+)([+-])(\d+)", date_str)
         if match:
-            sign = 1 if match.group(2) == "+" else -1
-            offset = sign * int(match.group(3))
+            offset = _parse_signed_int(match, 2, 3)
             if base := self.date_exprs.get(match.group(1)):
                 return OffsetDateExpr(base, offset)
 
@@ -578,8 +552,10 @@ class DateStringParser:
         """Parse YYYY/M/D or YYYY-MM-DD format (e.g., 2026/2/17, 2026-02-17)."""
         match = re.fullmatch(r"(\d{4})[/-](\d{1,2})[/-](\d{1,2})", date_str)
         if match:
-            return FullDate(
-                int(match.group(1)), int(match.group(2)), int(match.group(3))
+            return FixedDate(
+                month=int(match.group(2)),
+                day=int(match.group(3)),
+                year=int(match.group(1)),
             )
         return None
 
@@ -599,8 +575,7 @@ class DateStringParser:
             month = int(match.group(1))
             wkday_name = match.group(2)
             if wkday_name in self.weekday_map:
-                sign = 1 if match.group(3) == "+" else -1
-                n = sign * int(match.group(4))
+                n = _parse_signed_int(match, 3, 4)
                 return NthWeekdayOfMonth(month, self.weekday_map[wkday_name], n)
         return None
 
@@ -609,8 +584,7 @@ class DateStringParser:
         match = re.fullmatch(r"([a-z]+)\s+([a-z]+)([+-])(\d+)", date_str)
         if match:
             month_name, wkday_name = match.group(1), match.group(2)
-            sign = 1 if match.group(3) == "+" else -1
-            n = sign * int(match.group(4))
+            n = _parse_signed_int(match, 3, 4)
             if month_name in self.month_map and wkday_name in self.weekday_map:
                 return NthWeekdayOfMonth(
                     self.month_map[month_name],
@@ -633,8 +607,7 @@ class DateStringParser:
         match = re.fullmatch(r"\*\s+([a-z]+)([+-])(\d+)", date_str)
         if match:
             wkday_name = match.group(1)
-            sign = 1 if match.group(2) == "+" else -1
-            n = sign * int(match.group(3))
+            n = _parse_signed_int(match, 2, 3)
             if wkday_name in self.weekday_map:
                 return NthWeekdayEveryMonth(self.weekday_map[wkday_name], n)
         return None
@@ -778,6 +751,27 @@ def get_utc_offset_hours() -> float:
     return utc_offset.total_seconds() / 3600
 
 
+def resolve_coordinates(
+    utc_offset_flag: float | None,
+    longitude_flag: float | None,
+) -> tuple[float, float]:
+    """Derive UTC offset and east longitude from -U and -l flags.
+
+    Returns:
+        (utc_offset_hours, east_longitude)
+
+    """
+    if utc_offset_flag is not None:
+        longitude = (
+            longitude_flag if longitude_flag is not None else utc_offset_flag * 15
+        )
+        return utc_offset_flag, longitude
+    if longitude_flag is not None:
+        return longitude_flag / 15, longitude_flag
+    offset = get_utc_offset_hours()
+    return offset, offset * 15
+
+
 def get_seasons(year: int, utc_offset_hours: float = 0) -> dict[str, datetime.date]:
     """Get the dates of equinoxes and solstices for a given year.
 
@@ -891,19 +885,19 @@ def parse_special_dates(
     date_exprs: dict[str, DateExpr] = {}
 
     # Start with known special dates
-    date_exprs["easter"] = SpecialDate(dateutil.easter.easter(year))
-    date_exprs["paskha"] = SpecialDate(
+    date_exprs["easter"] = ResolvedDate.of(dateutil.easter.easter(year))
+    date_exprs["paskha"] = ResolvedDate.of(
         dateutil.easter.easter(year, method=dateutil.easter.EASTER_ORTHODOX)
     )
-    date_exprs["chinesenewyear"] = SpecialDate(LunarDate(year, 1, 1).toSolarDate())
+    date_exprs["chinesenewyear"] = ResolvedDate.of(LunarDate(year, 1, 1).toSolarDate())
 
     # Add astronomical season dates
     for name, date in get_seasons(year, utc_offset_hours).items():
-        date_exprs[name] = SpecialDate(date)
+        date_exprs[name] = ResolvedDate.of(date)
 
     # Add moon phases as recurring dates
     for name, dates in get_moon_phases(year, utc_offset_hours).items():
-        date_exprs[name] = RecurringDate(frozenset(dates))
+        date_exprs[name] = ResolvedDate(frozenset(dates))
 
     # Parse aliases from calendar file
     for line in calendar_lines:
