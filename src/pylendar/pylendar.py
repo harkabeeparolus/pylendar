@@ -72,7 +72,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, TypeAlias
 
 try:
     import dateutil.easter
@@ -111,6 +111,8 @@ ORDINAL_MAP: dict[str, int] = {
 }
 ORDINALS_RE = "|".join(ORDINAL_MAP)
 
+DateSet: TypeAlias = set[datetime.date]
+
 
 class DateExpr(ABC):  # pylint: disable=too-few-public-methods
     """A date expression that resolves to concrete dates for a given year."""
@@ -123,7 +125,7 @@ class DateExpr(ABC):  # pylint: disable=too-few-public-methods
     """
 
     @abstractmethod
-    def resolve(self, year: int) -> set[datetime.date]:
+    def resolve(self, year: int) -> DateSet:
         """Return the set of dates this expression matches in the given year."""
 
 
@@ -136,7 +138,7 @@ class FixedDate(DateExpr):
     month: int
     day: int
 
-    def resolve(self, year: int) -> set[datetime.date]:
+    def resolve(self, year: int) -> DateSet:
         """Return the single date for this month/day in the given year."""
         try:
             return {datetime.date(year, self.month, self.day)}
@@ -154,7 +156,7 @@ class FullDate(DateExpr):
     month: int
     day: int
 
-    def resolve(self, year: int) -> set[datetime.date]:  # noqa: ARG002
+    def resolve(self, year: int) -> DateSet:  # noqa: ARG002
         """Return the single fully-specified date, ignoring the passed year."""
         try:
             return {datetime.date(self.year, self.month, self.day)}
@@ -170,9 +172,9 @@ class WildcardDay(DateExpr):
 
     day: int
 
-    def resolve(self, year: int) -> set[datetime.date]:
+    def resolve(self, year: int) -> DateSet:
         """Return dates for this day in all 12 months of the given year."""
-        dates: set[datetime.date] = set()
+        dates: DateSet = set()
         for month in range(1, 13):
             with contextlib.suppress(ValueError):
                 dates.add(datetime.date(year, month, self.day))
@@ -185,7 +187,7 @@ class SpecialDate(DateExpr):
 
     date: datetime.date
 
-    def resolve(self, year: int) -> set[datetime.date]:  # noqa: ARG002
+    def resolve(self, year: int) -> DateSet:  # noqa: ARG002
         """Return the pre-resolved date."""
         return {self.date}
 
@@ -196,7 +198,7 @@ class RecurringDate(DateExpr):
 
     dates: frozenset[datetime.date]
 
-    def resolve(self, year: int) -> set[datetime.date]:  # noqa: ARG002
+    def resolve(self, year: int) -> DateSet:  # noqa: ARG002
         """Return all pre-resolved dates."""
         return set(self.dates)
 
@@ -232,7 +234,7 @@ class NthWeekdayOfMonth(DateExpr):
     weekday: int
     n: int
 
-    def resolve(self, year: int) -> set[datetime.date]:
+    def resolve(self, year: int) -> DateSet:
         """Return the Nth weekday of the month, or empty if it doesn't exist."""
         result = _find_nth_weekday(year, self.month, self.weekday, self.n)
         return {result} if result else set()
@@ -245,9 +247,9 @@ class NthWeekdayEveryMonth(DateExpr):
     weekday: int
     n: int
 
-    def resolve(self, year: int) -> set[datetime.date]:
+    def resolve(self, year: int) -> DateSet:
         """Return the Nth weekday for each of the 12 months."""
-        dates: set[datetime.date] = set()
+        dates: DateSet = set()
         for month in range(1, 13):
             result = _find_nth_weekday(year, month, self.weekday, self.n)
             if result:
@@ -267,7 +269,7 @@ class OffsetDateExpr(DateExpr):
         """Delegate to the base expression."""
         return self.base.variable
 
-    def resolve(self, year: int) -> set[datetime.date]:
+    def resolve(self, year: int) -> DateSet:
         """Return base dates shifted by offset days."""
         delta = datetime.timedelta(days=self.offset)
         return {d + delta for d in self.base.resolve(year)}
@@ -279,12 +281,12 @@ class EveryWeekday(DateExpr):
 
     weekday: int
 
-    def resolve(self, year: int) -> set[datetime.date]:
+    def resolve(self, year: int) -> DateSet:
         """Return all occurrences of this weekday in the given year."""
         jan1 = datetime.date(year, 1, 1)
         days_ahead = (self.weekday - jan1.weekday()) % 7
         first = jan1 + datetime.timedelta(days=days_ahead)
-        dates: set[datetime.date] = set()
+        dates: DateSet = set()
         current = first
         while current.year == year:
             dates.add(current)
@@ -808,9 +810,7 @@ def _search_moon_phases(
     return results
 
 
-def get_moon_phases(
-    year: int, utc_offset_hours: float = 0
-) -> dict[str, set[datetime.date]]:
+def get_moon_phases(year: int, utc_offset_hours: float = 0) -> dict[str, DateSet]:
     """Get all new and full moon dates for a given year.
 
     Returns:
@@ -985,7 +985,7 @@ def parse_today_arg(t_str: str) -> datetime.date:
 
 def get_dates_to_check(
     today: datetime.date, ahead: int = 1, behind: int = 0
-) -> set[datetime.date]:
+) -> DateSet:
     """Determine the set of dates to check for events, given -A and -B options."""
     return {
         today + datetime.timedelta(days=offset) for offset in range(-behind, ahead + 1)
@@ -1139,7 +1139,7 @@ def replace_age_in_description(description: str, check_date: datetime.date) -> s
 
 def get_matching_event(
     line: str,
-    dates_to_check: set[datetime.date],
+    dates_to_check: DateSet,
     parser: DateStringParser,
 ) -> Event | None:
     """Get the event from this line if it matches any of the target dates.
@@ -1159,7 +1159,7 @@ def get_matching_event(
         return None
 
     years = {d.year for d in dates_to_check}
-    resolved: set[datetime.date] = set()
+    resolved: DateSet = set()
     for year in years:
         resolved |= expr.resolve(year)
     matching = resolved & dates_to_check
