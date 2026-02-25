@@ -20,6 +20,10 @@ uv run ty check          # type checking
 uv run pylendar          # run pylendar CLI
 ```
 
+## Design
+
+This command tries to be compatible with old versions. Copies of various manpages are available in `docs/*.1.md`. There is a comparison in `docs/manpage_comparison.md`.
+
 There is test data from FreeBSD default calendar files in the `calendars/` subdirectory.
 
 ## Architecture

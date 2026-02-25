@@ -18,8 +18,15 @@ from pylendar.pylendar import (
 def run_calendar(tmp_path):
     """Fixture that processes calendar content and returns sorted event strings."""
 
-    def _run(  # pylint: disable=too-many-arguments
-        calendar_content, today, ahead=None, behind=0, *, friday=4, weekday=False
+    def _run(  # pylint: disable=too-many-arguments,too-many-locals
+        calendar_content,
+        today,
+        ahead=None,
+        behind=0,
+        *,
+        friday=4,
+        weekday=False,
+        utc_offset_hours=0,
     ):
         calendar_file = tmp_path / "calendar"
         calendar_file.write_text(calendar_content)
@@ -32,7 +39,9 @@ def run_calendar(tmp_path):
         )
         dates_to_check = get_dates_to_check(today, ahead=ahead_days, behind=behind_days)
 
-        date_exprs = parse_special_dates(calendar_lines, today.year)
+        date_exprs = parse_special_dates(
+            calendar_lines, today.year, utc_offset_hours
+        )
         date_parser = DateStringParser(date_exprs)
         matching_events = [
             event

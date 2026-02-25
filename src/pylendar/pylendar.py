@@ -310,6 +310,21 @@ def cli(argv: list[str] | None = None) -> None:  # pylint: disable=too-many-loca
     else:
         logging.getLogger().setLevel(logging.INFO)
 
+    # Resolve UTC offset and longitude
+    if args.U is not None:
+        utc_offset = args.U
+        longitude = args.l if args.l is not None else utc_offset * 15
+    elif args.l is not None:
+        utc_offset = args.l / 15
+        longitude = args.l
+    else:
+        utc_offset = get_utc_offset_hours()
+        longitude = utc_offset * 15
+
+    if args.D is not None:
+        print_diagnostic(args.D, args.today.year, utc_offset, longitude)
+        return
+
     calendar_lines = []
     calendar_path = (
         Path(args.file) if args.file else find_calendar(DEFAULT_CALENDAR_PATHS)
@@ -332,7 +347,7 @@ def cli(argv: list[str] | None = None) -> None:  # pylint: disable=too-many-loca
     dates_to_check = get_dates_to_check(args.today, ahead=ahead, behind=behind)
 
     # Parse special dates and aliases once
-    date_exprs = parse_special_dates(calendar_lines, args.today.year)
+    date_exprs = parse_special_dates(calendar_lines, args.today.year, utc_offset)
 
     # Create a DateStringParser instance with date expressions
     date_parser = DateStringParser(date_exprs)
@@ -723,7 +738,16 @@ class SimpleCPP:
         return None
 
 
-def get_seasons(year: int) -> dict[str, datetime.date]:
+def get_utc_offset_hours() -> float:
+    """Derive UTC offset in hours from the system timezone."""
+    local_dt = datetime.datetime.now().astimezone()
+    utc_offset = local_dt.utcoffset()
+    if utc_offset is None:
+        return 0.0
+    return utc_offset.total_seconds() / 3600
+
+
+def get_seasons(year: int, utc_offset_hours: float = 0) -> dict[str, datetime.date]:
     """Get the dates of equinoxes and solstices for a given year.
 
     Returns:
@@ -731,15 +755,18 @@ def get_seasons(year: int) -> dict[str, datetime.date]:
 
     """
     seasons = astronomy.Seasons(year)
+    offset = datetime.timedelta(hours=utc_offset_hours)
     return {
-        "marequinox": seasons.mar_equinox.Utc().date(),
-        "junsolstice": seasons.jun_solstice.Utc().date(),
-        "sepequinox": seasons.sep_equinox.Utc().date(),
-        "decsolstice": seasons.dec_solstice.Utc().date(),
+        "marequinox": (seasons.mar_equinox.Utc() + offset).date(),
+        "junsolstice": (seasons.jun_solstice.Utc() + offset).date(),
+        "sepequinox": (seasons.sep_equinox.Utc() + offset).date(),
+        "decsolstice": (seasons.dec_solstice.Utc() + offset).date(),
     }
 
 
-def get_moon_phases(year: int) -> dict[str, set[datetime.date]]:
+def get_moon_phases(
+    year: int, utc_offset_hours: float = 0
+) -> dict[str, set[datetime.date]]:
     """Get all new and full moon dates for a given year.
 
     Returns:
@@ -748,6 +775,7 @@ def get_moon_phases(year: int) -> dict[str, set[datetime.date]]:
     """
     moon_phases: dict[str, set[datetime.date]] = {"newmoon": set(), "fullmoon": set()}
     start_time = astronomy.Time.Make(year, 1, 1, 0, 0, 0)
+    offset = datetime.timedelta(hours=utc_offset_hours)
 
     for phase_name, phase_angle in [("newmoon", 0), ("fullmoon", 180)]:
         search_time = start_time
@@ -755,7 +783,7 @@ def get_moon_phases(year: int) -> dict[str, set[datetime.date]]:
             moon_phase = astronomy.SearchMoonPhase(phase_angle, search_time, 40)
             if moon_phase is None:
                 break
-            phase_date = moon_phase.Utc().date()
+            phase_date = (moon_phase.Utc() + offset).date()
             if phase_date.year != year:
                 break
             moon_phases[phase_name].add(phase_date)
@@ -764,7 +792,85 @@ def get_moon_phases(year: int) -> dict[str, set[datetime.date]]:
     return moon_phases
 
 
-def parse_special_dates(calendar_lines: list[str], year: int) -> dict[str, DateExpr]:
+def _fractional_day_of_year(dt: datetime.datetime) -> float:
+    """Return the fractional day-of-year for a datetime (1-based, like tm_yday)."""
+    jan1 = datetime.datetime(dt.year, 1, 1)
+    elapsed = dt - jan1
+    return elapsed.total_seconds() / 86400 + 1
+
+
+def _format_frac(value: float) -> str:
+    """Format a float with ~6 significant figures, like BSD %g."""
+    return f"{value:.6g}"
+
+
+def _get_season_datetimes(
+    year: int, utc_offset_hours: float
+) -> list[tuple[str, datetime.datetime]]:
+    """Return equinox/solstice datetimes with UTC offset applied."""
+    seasons = astronomy.Seasons(year)
+    offset = datetime.timedelta(hours=utc_offset_hours)
+    return [
+        ("e[0]", seasons.mar_equinox.Utc() + offset),
+        ("e[1]", seasons.sep_equinox.Utc() + offset),
+        ("s[0]", seasons.jun_solstice.Utc() + offset),
+        ("s[1]", seasons.dec_solstice.Utc() + offset),
+    ]
+
+
+def _get_moon_phase_datetimes(
+    year: int, phase_angle: int, utc_offset_hours: float
+) -> list[datetime.datetime]:
+    """Return all moon phase datetimes for a year with UTC offset applied."""
+    start_time = astronomy.Time.Make(year, 1, 1, 0, 0, 0)
+    offset = datetime.timedelta(hours=utc_offset_hours)
+    results: list[datetime.datetime] = []
+    search_time = start_time
+    while True:
+        moon_phase = astronomy.SearchMoonPhase(phase_angle, search_time, 40)
+        if moon_phase is None:
+            break
+        dt = moon_phase.Utc() + offset
+        if dt.date().year != year:
+            break
+        results.append(dt)
+        search_time = astronomy.Time.AddDays(moon_phase, 1)
+    return results
+
+
+def print_diagnostic(
+    mode: str, year: int, utc_offset: float, longitude: float
+) -> None:
+    """Print diagnostic sun or moon information, then return."""
+    print(f"UTCOffset: {_format_frac(utc_offset)}")
+    print(f"eastlongitude: {_format_frac(longitude)}")
+
+    if mode == "sun":
+        print(f"Sun in {year}:")
+        for label, dt in _get_season_datetimes(year, utc_offset):
+            frac = _fractional_day_of_year(dt)
+            ts = dt.strftime("%m-%d %H:%M:%S")
+            print(f"{label} - {_format_frac(frac)} ({ts})")
+    else:
+        full_dts = _get_moon_phase_datetimes(year, 180, utc_offset)
+        new_dts = _get_moon_phase_datetimes(year, 0, utc_offset)
+        entries = []
+        for dt in full_dts:
+            frac = _fractional_day_of_year(dt)
+            ts = dt.strftime("%m-%d %H:%M:%S")
+            entries.append(f"{_format_frac(frac)} ({ts})")
+        print(f"Full moon {year}:\t" + " ".join(entries))
+        entries = []
+        for dt in new_dts:
+            frac = _fractional_day_of_year(dt)
+            ts = dt.strftime("%m-%d %H:%M:%S")
+            entries.append(f"{_format_frac(frac)} ({ts})")
+        print(f"New moon {year}:\t" + " ".join(entries))
+
+
+def parse_special_dates(
+    calendar_lines: list[str], year: int, utc_offset_hours: float = 0
+) -> dict[str, DateExpr]:
     """Parse special date definitions and aliases from the calendar file.
 
     Returns:
@@ -781,11 +887,11 @@ def parse_special_dates(calendar_lines: list[str], year: int) -> dict[str, DateE
     date_exprs["chinesenewyear"] = SpecialDate(LunarDate(year, 1, 1).toSolarDate())
 
     # Add astronomical season dates
-    for name, date in get_seasons(year).items():
+    for name, date in get_seasons(year, utc_offset_hours).items():
         date_exprs[name] = SpecialDate(date)
 
     # Add moon phases as recurring dates
-    for name, dates in get_moon_phases(year).items():
+    for name, dates in get_moon_phases(year, utc_offset_hours).items():
         date_exprs[name] = RecurringDate(frozenset(dates))
 
     # Parse aliases from calendar file
@@ -919,6 +1025,28 @@ def build_parser() -> argparse.ArgumentParser:
         # Day numbering follows BSD tm_wday convention.
         help='Set which day is "Friday" (the day before the weekend). '
         "Day numbering: 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat. Default 5.",
+    )
+    parser.add_argument(
+        "-l",
+        type=float,
+        default=None,
+        metavar="longitude",
+        help="East longitude of your stranding. Default derived from UTC offset.",
+    )
+    parser.add_argument(
+        "-U",
+        type=float,
+        default=None,
+        metavar="utc-offset",
+        help="UTC offset in hours (e.g. -8 for PST, 1 for CET). "
+        "Default derived from system timezone.",
+    )
+    parser.add_argument(
+        "-D",
+        choices=["sun", "moon"],
+        default=None,
+        metavar="sun|moon",
+        help="Print diagnostic sun or moon information and exit.",
     )
     parser.add_argument(
         "-t",

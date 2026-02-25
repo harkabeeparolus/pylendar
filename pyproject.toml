@@ -42,6 +42,7 @@ per-file-ignores."typings/**/*.pyi" = [
 per-file-ignores."test/*.py" = [
     "S101",    # Use of assert detected (normal in tests)
     "S603",    # subprocess call (acceptable in tests)
+    "S607",    # partial executable path in subprocess (acceptable in tests)
     "PLR2004", # Magic value used in comparison (acceptable in tests)
     "PLR0913", # Too many arguments (unified test fixture)
     "PLW2901", # Redefining name from outer scope (pytest fixtures)
@@ -69,7 +70,7 @@ unused-type-ignore-comment = "ignore"
 [tool.pylint]
 main.py-version = "3.11"
 main.jobs = 0                       # 0 means all available cores
-design.max-module-lines = 1100      # single-file design is intentional
+design.max-module-lines = 1200      # single-file design is intentional
 reports.output-format = "colorized"
 
 [tool.pylint."messages control"]
@@ -77,5 +78,6 @@ disable = [
     "logging-fstring-interpolation",
     "logging-format-interpolation",
     "redefined-outer-name",           # pytest fixtures use this pattern
+    "too-few-public-methods",         # pytest test classes
 ]
 enable = ["useless-suppression"]
