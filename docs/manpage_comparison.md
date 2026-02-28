@@ -101,43 +101,6 @@ full directive set).
 | **`/usr/local/share/calendar`** | 3rd | 3rd | — | — | — |
 | **`/usr/share/calendar`** | 4th | 4th | fallback | fallback | fallback |
 
-## Bundled Calendar Files
-
-| File | macOS | FreeBSD | OpenBSD | NetBSD | Debian |
-|---|---|---|---|---|---|
-| *calendar.all* | — | yes | yes | — | yes |
-| *calendar.australia* | — | yes | — | — | — |
-| *calendar.birthday* | — | yes | yes | yes | yes |
-| *calendar.canada* | — | — | yes | — | yes |
-| *calendar.christian* | — | yes | yes | yes | yes |
-| *calendar.computer* | — | yes | yes | yes | yes |
-| *calendar.croatian* | — | yes | yes | — | yes |
-| *calendar.discord* | — | — | yes | — | yes |
-| *calendar.dutch* | — | yes | — | — | — |
-| *calendar.fictional* | — | — | yes | — | yes |
-| *calendar.freebsd* | — | yes | — | — | — |
-| *calendar.french* | — | yes | yes | — | yes |
-| *calendar.german* | — | yes | yes | — | yes |
-| *calendar.history* | — | yes | yes | yes | yes |
-| *calendar.holiday* | — | yes | yes | yes | yes |
-| *calendar.judaic* | — | yes | yes | yes | yes |
-| *calendar.lotr* | — | — | — | yes | — |
-| *calendar.music* | — | yes | yes | yes | yes |
-| *calendar.netbsd* | — | — | — | yes | — |
-| *calendar.newzealand* | — | yes | — | — | — |
-| *calendar.nz* | — | — | yes | — | yes |
-| *calendar.openbsd* | — | — | yes | — | yes |
-| *calendar.pagan* | — | — | yes | — | yes |
-| *calendar.russian* | — | yes | yes | — | yes |
-| *calendar.southafrica* | — | yes | — | — | — |
-| *calendar.space* | — | — | yes | — | yes |
-| *calendar.uk* | — | — | yes | — | yes |
-| *calendar.ushistory* | — | — | yes | — | yes |
-| *calendar.usholiday* | — | yes | yes | yes | yes |
-| *calendar.world* | — | yes | yes | — | yes |
-
-Note: macOS does not document bundled calendar files in its manpage.
-
 ## Manpage Sections
 
 | Section | macOS | FreeBSD | OpenBSD | NetBSD | Debian |
