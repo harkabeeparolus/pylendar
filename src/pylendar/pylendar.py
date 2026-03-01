@@ -67,6 +67,7 @@ import argparse
 import calendar
 import contextlib
 import datetime
+import locale
 import logging
 import os
 import re
@@ -354,6 +355,14 @@ def cli(argv: list[str] | None = None) -> None:
         print(line)
 
 
+@dataclass(frozen=True)
+class CalendarDirectives:
+    """Global directives parsed from a calendar file (LANG=, SEQUENCE=)."""
+
+    lang: str | None = None
+    sequence: tuple[str, ...] | None = None
+
+
 @dataclass
 class CalendarOptions:
     """Options for calendar processing."""
@@ -384,7 +393,8 @@ def process_calendar(
     )
     dates_to_check = get_dates_to_check(today, ahead=ahead_days, behind=behind_days)
     date_exprs = parse_special_dates(calendar_lines, today.year, opts.utc_offset_hours)
-    date_parser = DateStringParser(date_exprs)
+    directives = extract_directives(calendar_lines)
+    date_parser = DateStringParser(date_exprs, directives=directives)
 
     log.debug(f"File path = {calendar_path}")
     log.debug(f"Today is {today}")
@@ -473,20 +483,43 @@ class DateStringParser:
 
     month_map: dict[str, int]
     weekday_map: dict[str, int]
+    ordinal_map: dict[str, int]
+    ordinals_re: str
 
     def __init__(
         self,
         date_exprs: dict[str, DateExpr] | None = None,
+        *,
+        directives: CalendarDirectives | None = None,
     ) -> None:
-        """Initialize the parser with optional date expressions."""
+        """Initialize the parser with optional date expressions and directives."""
         self.date_exprs = date_exprs or {}
+        dirs = directives or CalendarDirectives()
+
+        # Start with system locale names
         self.month_map = self.build_month_map()
         self.weekday_map = self.build_weekday_map()
 
-        # Ensure we have month/weekday names in US English locale
+        # Layer C/English names on top
         with calendar.different_locale("C"):  # type: ignore[arg-type]
             self.month_map.update(self.build_month_map())
             self.weekday_map.update(self.build_weekday_map())
+
+        # Layer LANG= locale names on top, if set
+        if dirs.lang and dirs.lang.lower().split(".")[0] not in _LANG_NOOP:
+            try:
+                with calendar.different_locale(dirs.lang):  # type: ignore[arg-type]
+                    self.month_map.update(self.build_month_map())
+                    self.weekday_map.update(self.build_weekday_map())
+            except locale.Error:
+                log.warning(f"LANG={dirs.lang}: locale not available; ignoring")
+
+        # Build per-instance ordinal map
+        self.ordinal_map = dict(ORDINAL_MAP)
+        if dirs.sequence:
+            for word, n in zip(dirs.sequence, (1, 2, 3, 4, 5, -1), strict=True):
+                self.ordinal_map[word.lower()] = n
+        self.ordinals_re = "|".join(self.ordinal_map)
 
     @staticmethod
     def build_month_map() -> dict[str, int]:
@@ -545,7 +578,7 @@ class DateStringParser:
 
     def _parse_ordinal_weekday(self, date_str: str) -> DateExpr | None:
         """Parse BSD ordinal weekday formats (e.g., 10/MonSecond, Oct/SatFourth-2)."""
-        ordinals = ORDINALS_RE
+        ordinals = self.ordinals_re
 
         # MM/WkdayOrdinal with optional offset (e.g., 10/monsecond, 01/monthird)
         match = re.fullmatch(rf"(\d{{1,2}})/([a-z]+)({ordinals})([+-]\d+)?", date_str)
@@ -565,7 +598,7 @@ class DateStringParser:
 
         if wkday_name not in self.weekday_map:
             return None
-        n = ORDINAL_MAP[match.group(3)]
+        n = self.ordinal_map[match.group(3)]
         base: DateExpr = NthWeekdayOfMonth(month, self.weekday_map[wkday_name], n)
         if match.group(4):
             base = OffsetDateExpr(base, int(match.group(4)))
@@ -677,13 +710,13 @@ class DateStringParser:
 
     def _parse_wkday_ord_month(self, date_str: str) -> DateExpr | None:
         """Parse WkdayOrd Month format (e.g., SunFirst Aug, SunThird Jul)."""
-        ordinals = ORDINALS_RE
+        ordinals = self.ordinals_re
         match = re.fullmatch(rf"([a-z]+)({ordinals})\s+([a-z]+)", date_str)
         if match:
             wkday_name = match.group(1)
             month_name = match.group(3)
             if wkday_name in self.weekday_map and month_name in self.month_map:
-                n = ORDINAL_MAP[match.group(2)]
+                n = self.ordinal_map[match.group(2)]
                 return NthWeekdayOfMonth(
                     self.month_map[month_name],
                     self.weekday_map[wkday_name],
@@ -970,6 +1003,38 @@ def parse_special_dates(
                 date_exprs[left] = date_exprs[right]
 
     return date_exprs
+
+
+_LANG_NOOP = frozenset({"c", "posix", "utf-8", "utf8"})
+
+
+def extract_directives(calendar_lines: list[str]) -> CalendarDirectives:
+    """Extract LANG= and SEQUENCE= directives from preprocessed calendar lines.
+
+    Directives are lines without tabs whose left-hand side is ``LANG`` or
+    ``SEQUENCE`` (case-sensitive).  Last occurrence wins.
+    """
+    lang: str | None = None
+    sequence: tuple[str, ...] | None = None
+
+    for line in calendar_lines:
+        if "\t" in line or "=" not in line:
+            continue
+        left, right = line.split("=", 1)
+        left = left.strip()
+        right = right.strip()
+        if left == "LANG":
+            lang = right or None
+        elif left == "SEQUENCE":
+            words = right.split()
+            if len(words) == 6:  # noqa: PLR2004
+                sequence = tuple(words)
+            else:
+                log.warning(
+                    f"SEQUENCE= requires exactly 6 words, got {len(words)}; ignoring"
+                )
+
+    return CalendarDirectives(lang=lang, sequence=sequence)
 
 
 def _parse_dot_date(t_str: str) -> datetime.date:
