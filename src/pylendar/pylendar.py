@@ -26,7 +26,10 @@ Supported Date Formats:
     - YYYY-MM-DD      (e.g., 2026-02-17) - ISO date format
     - MM/DD           (e.g., 07/09)
     - Month DD        (e.g., Jul 9, July 9)
-    - * DD            (e.g., * 9) - for the nth day of any month
+    - * DD / *DD      (e.g., * 9, *15) - DDth of every month
+    - DD *            (e.g., 15 *) - DDth of every month (reversed)
+    - **  / * *       Every day of the year
+    - Month* / Month *(e.g., June*, Jun *) - every day of that month
     - Month Wkday+N   (e.g., May Sun+2) - Nth weekday of a month
     - Month Wkday-N   (e.g., May Mon-1) - last Nth weekday of a month
     - MM/Wkday+N      (e.g., 03/Sun-1) - Nth weekday of numbered month
@@ -165,6 +168,33 @@ class WildcardDay(DateExpr):
             with contextlib.suppress(ValueError):
                 dates.add(datetime.date(year, month, self.day))
         return dates
+
+
+@dataclass(frozen=True)
+class EveryDay(DateExpr):
+    """Matches every day of the year (e.g., **)."""
+
+    variable: ClassVar[bool] = False
+
+    def resolve(self, year: int) -> DateSet:
+        """Return all dates in the given year."""
+        jan1 = datetime.date(year, 1, 1)
+        num_days = 366 if calendar.isleap(year) else 365
+        return {jan1 + datetime.timedelta(days=d) for d in range(num_days)}
+
+
+@dataclass(frozen=True)
+class EveryDayOfMonth(DateExpr):
+    """Matches every day of a specific month (e.g., June*)."""
+
+    variable: ClassVar[bool] = False
+
+    month: int
+
+    def resolve(self, year: int) -> DateSet:
+        """Return all dates in the given month."""
+        num_days = calendar.monthrange(year, self.month)[1]
+        return {datetime.date(year, self.month, d) for d in range(1, num_days + 1)}
 
 
 @dataclass(frozen=True)
@@ -365,7 +395,7 @@ def process_calendar(
     matching_events = [
         event
         for line in calendar_lines
-        if (event := get_matching_event(line, dates_to_check, date_parser))
+        for event in get_matching_events(line, dates_to_check, date_parser)
     ]
     return [
         format_event(event, weekday=opts.weekday) for event in sorted(matching_events)
@@ -616,8 +646,31 @@ class DateStringParser:
 
     @staticmethod
     def _parse_wildcard_day(date_str: str) -> DateExpr | None:
-        """Parse * DD format (e.g., * 9)."""
-        match = re.fullmatch(r"\*\s+(\d{1,2})", date_str)
+        """Parse * DD or *DD format (e.g., * 9, *15)."""
+        match = re.fullmatch(r"\*\s*(\d{1,2})", date_str)
+        if match:
+            return WildcardDay(int(match.group(1)))
+        return None
+
+    @staticmethod
+    def _parse_every_day(date_str: str) -> DateExpr | None:
+        """Parse ** or * * format (every day of the year)."""
+        if re.fullmatch(r"\*\s*\*", date_str):
+            return EveryDay()
+        return None
+
+    def _parse_month_wildcard(self, date_str: str) -> DateExpr | None:
+        """Parse Month* or Month * format (every day of that month, e.g., June*)."""
+        match = re.fullmatch(r"([a-z]+)\s*\*", date_str)
+        if match:
+            month_name = match.group(1)
+            if month_name in self.month_map:
+                return EveryDayOfMonth(self.month_map[month_name])
+        return None
+
+    def _parse_wildcard_day_reversed(self, date_str: str) -> DateExpr | None:
+        """Parse DD * format (e.g., 15 * for 15th of every month)."""
+        match = re.fullmatch(r"(\d{1,2})\s+\*", date_str)
         if match:
             return WildcardDay(int(match.group(1)))
         return None
@@ -664,9 +717,12 @@ class DateStringParser:
         return (
             self._parse_month_wkday_offset(date_str)
             or self._parse_month_dd(date_str)
+            or self._parse_month_wildcard(date_str)
+            or self._parse_every_day(date_str)
             or self._parse_wildcard_wkday(date_str)
             or self._parse_wildcard_day(date_str)
             or self._parse_wkday_ord_month(date_str)
+            or self._parse_wildcard_day_reversed(date_str)
             or self._parse_dd_month(date_str)
         )
 
@@ -1139,26 +1195,30 @@ def replace_age_in_description(description: str, check_date: datetime.date) -> s
     return description
 
 
-def get_matching_event(
+def get_matching_events(
     line: str,
     dates_to_check: DateSet,
     parser: DateStringParser,
-) -> Event | None:
-    """Get the event from this line if it matches any of the target dates.
+) -> list[Event]:
+    """Get events from this line that match any of the target dates.
 
-    Returns an Event object if the event matches any of the
-    dates to check, or None if there's no match.
+    Returns one Event per matching date, or an empty list if nothing matches.
     """
     if not line.strip() or "\t" not in line:
-        return None
+        return []
 
     date_str, event_description = line.split("\t", 1)
-    explicit_variable = date_str.rstrip().endswith("*")
-    if explicit_variable:
-        date_str = date_str.rstrip()[:-1]
+
     expr = parser.parse(date_str)
+    explicit_variable = False
+
+    if expr is None and date_str.rstrip().endswith("*"):
+        explicit_variable = True
+        date_str = date_str.rstrip()[:-1]
+        expr = parser.parse(date_str)
+
     if expr is None:
-        return None
+        return []
 
     years = {d.year for d in dates_to_check}
     resolved: DateSet = set()
@@ -1166,11 +1226,11 @@ def get_matching_event(
         resolved |= expr.resolve(year)
     matching = resolved & dates_to_check
 
-    if matching:
-        check_date = min(matching)
-        desc = replace_age_in_description(event_description, check_date)
-        return Event(check_date, desc, variable=explicit_variable or expr.variable)
-    return None
+    variable = explicit_variable or expr.variable
+    return [
+        Event(d, replace_age_in_description(event_description, d), variable=variable)
+        for d in matching
+    ]
 
 
 def find_calendar(look_in: Sequence[Path]) -> Path:

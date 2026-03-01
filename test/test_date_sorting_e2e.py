@@ -555,6 +555,174 @@ Jun\tAlso June 1st (abbreviation)
     assert result == []
 
 
+def test_every_day_double_star(run_calendar):
+    """Test ** matches any arbitrary date and multiple days in a range."""
+    calendar_content = """\
+**\tDaily standup
+"""
+    today = datetime.date(2026, 3, 10)
+    result = run_calendar(calendar_content, today, ahead=2)
+    assert result == [
+        "Mar 10\tDaily standup",
+        "Mar 11\tDaily standup",
+        "Mar 12\tDaily standup",
+    ]
+
+
+def test_every_day_spaced_star(run_calendar):
+    """Test * * (spaced) also matches every day."""
+    calendar_content = """\
+* *\tDaily reminder
+"""
+    today = datetime.date(2026, 6, 15)
+    result = run_calendar(calendar_content, today, ahead=1)
+    assert result == [
+        "Jun 15\tDaily reminder",
+        "Jun 16\tDaily reminder",
+    ]
+
+
+def test_month_wildcard_compact(run_calendar):
+    """Test June* matches days in June but not July."""
+    calendar_content = """\
+June*\tSummer fun
+"""
+    today = datetime.date(2026, 6, 14)
+    result = run_calendar(calendar_content, today, ahead=1)
+    assert result == [
+        "Jun 14\tSummer fun",
+        "Jun 15\tSummer fun",
+    ]
+
+    # July should not match
+    today = datetime.date(2026, 7, 1)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == []
+
+
+def test_month_wildcard_abbreviated(run_calendar):
+    """Test Jun* (abbreviated month) matches days in June."""
+    calendar_content = """\
+Jun*\tJune event
+"""
+    today = datetime.date(2026, 6, 30)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Jun 30\tJune event"]
+
+
+def test_month_wildcard_spaced(run_calendar):
+    """Test June * (spaced) also matches days in June."""
+    calendar_content = """\
+June *\tJune spaced
+"""
+    today = datetime.date(2026, 6, 1)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Jun  1\tJune spaced"]
+
+
+def test_month_wildcard_vs_bare_month(run_calendar):
+    """Test June* vs bare June: June 1st gets both; other days get only June*."""
+    calendar_content = """\
+June\tFirst of June
+June*\tEvery day in June
+"""
+    # June 1st matches both
+    today = datetime.date(2026, 6, 1)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == [
+        "Jun  1\tFirst of June",
+        "Jun  1\tEvery day in June",
+    ]
+
+    # June 15th matches only June*
+    today = datetime.date(2026, 6, 15)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Jun 15\tEvery day in June"]
+
+
+def test_wildcard_day_no_space(run_calendar):
+    """Test *15 (no space) matches 15th of every month."""
+    calendar_content = """\
+*15\tPay rent
+"""
+    today = datetime.date(2026, 3, 15)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Mar 15\tPay rent"]
+
+    today = datetime.date(2026, 7, 15)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Jul 15\tPay rent"]
+
+
+def test_wildcard_day_space_and_no_space_equivalent(run_calendar):
+    """Test *15 and * 15 both match the same dates."""
+    calendar_content = """\
+*15\tNo space
+* 15\tWith space
+"""
+    today = datetime.date(2026, 4, 15)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == [
+        "Apr 15\tNo space",
+        "Apr 15\tWith space",
+    ]
+
+
+def test_wildcard_day_reversed(run_calendar):
+    """Test 15 * (reversed) matches 15th of every month."""
+    calendar_content = """\
+15 *\tPay rent
+"""
+    today = datetime.date(2026, 5, 15)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["May 15\tPay rent"]
+
+    today = datetime.date(2026, 11, 15)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Nov 15\tPay rent"]
+
+
+def test_feb_wildcard_leap_year(run_calendar):
+    """Test Feb* in leap year matches Feb 29."""
+    calendar_content = """\
+Feb*\tFebruary event
+"""
+    # 2024 is a leap year
+    today = datetime.date(2024, 2, 29)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Feb 29\tFebruary event"]
+
+
+def test_trailing_asterisk_variable_marker_still_works(run_calendar):
+    """Test Jul 4* trailing-asterisk variable marker still works."""
+    calendar_content = """\
+Jul 4*\tIndependence Day
+"""
+    today = datetime.date(2024, 7, 4)
+    result = run_calendar(calendar_content, today, ahead=0)
+    assert result == ["Jul  4*\tIndependence Day"]
+
+
+def test_mixed_wildcards_sort(run_calendar):
+    """Test mixed wildcards (**, June*, *15, fixed dates) sort correctly."""
+    calendar_content = """\
+**\tDaily standup
+June*\tSummer fun
+*15\tPay rent
+06/14\tFlag Day
+"""
+    today = datetime.date(2026, 6, 14)
+    result = run_calendar(calendar_content, today, ahead=1)
+    assert result == [
+        "Jun 14\tDaily standup",
+        "Jun 14\tSummer fun",
+        "Jun 14\tFlag Day",
+        "Jun 15\tDaily standup",
+        "Jun 15\tSummer fun",
+        "Jun 15\tPay rent",
+    ]
+
+
 def test_cli_smoke(tmp_path, monkeypatch):
     """Smoke test: invoke the CLI entry point and verify it produces expected output."""
     calendar_file = tmp_path / "calendar"

@@ -4,13 +4,9 @@ Features missing from pylendar compared to BSD calendar(1) implementations.
 See [manpage_comparison.md](manpage_comparison.md) for full details.
 It summarizes key findings from the `*.1.md` manpage reference copies.
 
-## NetBSD wildcard extensions
+## ~~NetBSD wildcard extensions~~ (done)
 
-Three additional wildcard date patterns from NetBSD:
-
-- `**` — every day of the year
-- `June*` — every day of a specific month (month name immediately followed by `*`)
-- `*15` — 15th of every month (no space, unlike existing `* 15`)
+Implemented: `**`/`* *`, `June*`/`June *`, `*15`, `15 *`.
 
 ## `LANG=` locale support
 
