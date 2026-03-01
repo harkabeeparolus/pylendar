@@ -48,7 +48,7 @@ per-file-ignores."test/*.py" = [
     "S607",    # partial executable path in subprocess (acceptable in tests)
     "PLR2004", # Magic value used in comparison (acceptable in tests)
     "PLR0913", # Too many arguments (unified test fixture)
-    "PLW2901", # Redefining name from outer scope (pytest fixtures)
+    "PLW2901", # Loop variable overwritten in body (e.g. normalization)
 ]
 select = ["ALL"]
 ignore = [
@@ -74,6 +74,7 @@ unused-type-ignore-comment = "ignore"
 main.py-version = "3.11"
 main.jobs = 0                       # 0 means all available cores
 design.max-module-lines = 1300      # single-file design is intentional
+main.fail-on = ["useless-suppression"]
 reports.output-format = "colorized"
 
 [tool.pylint."messages control"]
