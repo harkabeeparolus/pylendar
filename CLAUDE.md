@@ -53,8 +53,16 @@ Three main components:
 Tests are in `test/` directory:
 
 - `test_cpp.py` - SimpleCPP preprocessor tests (includes, circular detection)
-- `test_ahead_behind.py` - Date range calculation with Friday special cases
+- `test_coverage_gaps.py` - Targeted unit tests for edge cases (age replacement, aliases, impossible dates, include errors, fallback paths)
 - `test_date_sorting_e2e.py` - Integration tests for event sorting with mixed date formats
+- `test_directives.py` - LANG= and SEQUENCE= directive parsing
+- `test_find_calendar.py` - Calendar file discovery and CALENDAR_DIR support
+- `test_friday_weekend_flags.py` - -F (friday) and -W (weekend-ignore) flags
+- `test_longitude_utc.py` - UTC offset, longitude, and astronomical date flags
+- `test_parse_today.py` - -t flag date parsing (various formats)
+- `test_weekday_flag.py` - -w (weekday) flag output formatting
+
+Coverage is at 97% with branch coverage enabled. Untestable boilerplate (dependency `ImportError` guards, `KeyboardInterrupt` handler, `if __name__ == "__main__"`, and the `utcoffset() is None` fallback) is marked `# pragma: no cover`.
 
 ## Linting and Type Checking
 

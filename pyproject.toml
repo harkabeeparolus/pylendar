@@ -30,6 +30,7 @@ dev = [
     "mypy>=1.19.1",
     "pylint>=3.3.7",
     "pytest>=6.0",
+    "pytest-cov>=6.0",
     "ty>=0.0.17",
     "types-python-dateutil>=2.9.0.20260124",
 ]
@@ -85,3 +86,11 @@ disable = [
     "too-few-public-methods",         # pytest test classes
 ]
 enable = ["useless-suppression"]
+
+[tool.coverage.run]
+source = ["pylendar"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true

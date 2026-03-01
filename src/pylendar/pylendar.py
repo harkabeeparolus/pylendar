@@ -80,17 +80,17 @@ from typing import ClassVar, Self, TypeAlias
 
 try:
     import dateutil.easter
-except ImportError:
+except ImportError:  # pragma: no cover
     sys.exit("Error: This script requires the 'python-dateutil' package.")
 
 try:
     import astronomy
-except ImportError:
+except ImportError:  # pragma: no cover
     sys.exit("Error: This script requires the 'astronomy-engine' package.")
 
 try:
     from lunardate import LunarDate
-except ImportError:
+except ImportError:  # pragma: no cover
     sys.exit("Error: This script requires the 'lunardate' package.")
 
 log = logging.getLogger("pylendar")
@@ -310,7 +310,7 @@ def main(argv: list[str] | None = None) -> None:
     setup_logging()
     try:
         return cli(argv)
-    except KeyboardInterrupt:
+    except KeyboardInterrupt:  # pragma: no cover
         sys.exit("Interrupted by user.")
 
 
@@ -837,7 +837,7 @@ def get_utc_offset_hours() -> float:
     """Derive UTC offset in hours from the system timezone."""
     local_dt = datetime.datetime.now().astimezone()
     utc_offset = local_dt.utcoffset()
-    if utc_offset is None:
+    if utc_offset is None:  # pragma: no cover
         return 0.0
     return utc_offset.total_seconds() / 3600
 
@@ -1320,5 +1320,5 @@ def find_calendar(look_in: Sequence[Path]) -> Path:
     return Path("calendar")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

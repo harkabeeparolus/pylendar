@@ -26,6 +26,10 @@ build:
 test *ARGS:
     uv run pytest {{ARGS}}
 
+# Run tests with coverage report
+coverage *ARGS:
+    uv run pytest --cov --cov-report=term-missing {{ARGS}}
+
 # Autofix ruff issues and format code
 [group('details')]
 fix:
