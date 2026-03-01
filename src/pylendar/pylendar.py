@@ -1174,7 +1174,9 @@ def find_calendar(look_in: Sequence[Path]) -> Path:
     look_first, resolving includes relative to the including file (correct C
     preprocessor semantics) without relying on the process working directory.
     """
-    dirs = [Path.cwd(), *look_in]
+    calendar_dir = os.environ.get("CALENDAR_DIR")
+    first = Path(calendar_dir) if calendar_dir else Path.cwd()
+    dirs = [first, *look_in]
     my_dir = (Path.home() / ".calendar").resolve()
     if my_dir.is_dir():
         dirs.insert(1, my_dir)

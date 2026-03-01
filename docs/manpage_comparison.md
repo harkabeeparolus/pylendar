@@ -31,7 +31,7 @@ Comparison of four implementations of the `calendar(1)` utility.
 | **`-d` *date*** | — | — | — | `MMDD[[YY]YY]` | — |
 | **`-U` *offset*** | UTC offset | UTC offset | — | — | — |
 | **`-v`** | — | — | — | print version | — |
-| **`-W` *num*** | forward, skip weekends | forward, skip weekends | — | — | — |
+| **`-W` *num*** | forward, no Friday exp. | forward, no Friday exp. | — | — | — |
 | **`-w`** | — | — | print weekday name | extra Friday days | print weekday name |
 | **`-x`** | — | — | — | no `CPP_RESTRICTED` | — |
 
@@ -100,6 +100,37 @@ full directive set).
 | **`/etc/calendar`** | — | — | — | 3rd | — |
 | **`/usr/local/share/calendar`** | 3rd | 3rd | — | — | — |
 | **`/usr/share/calendar`** | 4th | 4th | fallback | fallback | fallback |
+
+## Pylendar Deviations from FreeBSD
+
+### `-A` / `-W` range semantics
+
+FreeBSD's range formula is `[today − B, today + offset + A]` where `offset`
+is a base look-ahead (3 on Friday, 1 otherwise). `-A` and `-W` set the
+*additional* days (`f_dayAfter`) on top of that offset, and `-W` forces
+`offset = 1` by setting `Friday = −1`.
+
+Pylendar treats the `-A` / `-W` value as the *total* look-ahead, replacing
+the default rather than stacking. The two behave identically when no
+explicit `-A` or `-W` is given.
+
+| Scenario (non-Friday) | FreeBSD | Pylendar |
+|---|---|---|
+| default (no flags) | today + 1 (2 days) | today + 1 (2 days) |
+| `-A 0` | today + 1 (2 days) | today (1 day) |
+| `-A 2` | today + 3 (4 days) | today + 2 (3 days) |
+| `-A 5` | today + 6 (7 days) | today + 5 (6 days) |
+
+| Scenario (Friday) | FreeBSD | Pylendar |
+|---|---|---|
+| default (no flags) | today + 3 (4 days) | today + 3 (4 days) |
+| `-A 2` | today + 5 (6 days) | today + 2 (3 days) |
+| `-W 5` | today + 6 (7 days) | today + 5 (6 days) |
+
+The FreeBSD manpage describes `-W` as "ignore weekends when calculating the
+number of days." The source code (`calendar.c`) reveals this means disabling
+the Friday look-ahead expansion — it does **not** count business days or
+skip weekend dates from the output.
 
 ## Manpage Sections
 

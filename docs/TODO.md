@@ -4,19 +4,6 @@ Features missing from pylendar compared to BSD calendar(1) implementations.
 See [manpage_comparison.md](manpage_comparison.md) for full details.
 It summarizes key findings from the `*.1.md` manpage reference copies.
 
-## Fix `-W` to skip weekends
-
-Currently `-W num` behaves like `-A num` (counts calendar days). The
-macOS/FreeBSD spec says `-W` should count only weekdays (business days),
-so `-W 5` means 5 business days ahead, potentially spanning 7+ calendar
-days. Also disables Friday look-ahead expansion.
-
-## `CALENDAR_DIR` environment variable
-
-OpenBSD, NetBSD, and Debian check the `CALENDAR_DIR` environment variable
-for the calendar directory before falling back to the default search path.
-Add to `find_calendar()`.
-
 ## `--version` flag
 
 Standard CLI practice. NetBSD uses `-v` for this; we use `-v` for verbose,
