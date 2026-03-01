@@ -1,6 +1,6 @@
 [project]
 name = "pylendar"
-version = "0.5.0"
+dynamic = ["version"]
 description = "Python port of the calendar reminder utility commonly found on BSD-style systems, which displays upcoming relevant dates."
 readme = "README.md"
 urls.source = "https://github.com/harkabeeparolus/pylendar"
@@ -19,8 +19,11 @@ pylendar = "pylendar:main"
 calendar = "pylendar:main"
 
 [build-system]
-requires = ["uv_build>=0.7.19,<0.8"]
-build-backend = "uv_build"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/pylendar/pylendar.py"
 
 [dependency-groups]
 dev = [

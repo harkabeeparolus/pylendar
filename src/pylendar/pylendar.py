@@ -92,6 +92,8 @@ except ImportError:
 log = logging.getLogger("pylendar")
 
 
+__version__ = "0.5.0"
+
 XDG_CONFIG_HOME = Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config"))
 DEFAULT_CALENDAR_PATHS: list[Path] = [
     Path.home() / ".calendar",
@@ -1078,6 +1080,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="count",
         default=0,
         help="Increase verbosity (can be used multiple times).",
+    )
+    parser.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
     return parser
 

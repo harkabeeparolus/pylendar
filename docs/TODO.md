@@ -4,11 +4,6 @@ Features missing from pylendar compared to BSD calendar(1) implementations.
 See [manpage_comparison.md](manpage_comparison.md) for full details.
 It summarizes key findings from the `*.1.md` manpage reference copies.
 
-## `--version` flag
-
-Standard CLI practice. NetBSD uses `-v` for this; we use `-v` for verbose,
-so add as `-V/--version` only.
-
 ## NetBSD wildcard extensions
 
 Three additional wildcard date patterns from NetBSD:
