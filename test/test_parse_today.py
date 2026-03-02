@@ -27,6 +27,22 @@ def test_positional_formats(arg: str, expected: datetime.date) -> None:
     assert parse_today_arg(arg) == expected
 
 
+# --- ISO 8601 format ---
+
+
+@pytest.mark.parametrize(
+    ("arg", "expected"),
+    [
+        ("2026-03-02", datetime.date(2026, 3, 2)),
+        ("1999-12-31", datetime.date(1999, 12, 31)),
+    ],
+    ids=["typical", "end-of-century"],
+)
+def test_iso_formats(arg: str, expected: datetime.date) -> None:
+    """Parse ISO 8601 date format (YYYY-MM-DD)."""
+    assert parse_today_arg(arg) == expected
+
+
 # --- macOS/FreeBSD dot-separated format ---
 
 
@@ -66,6 +82,8 @@ def test_dot_formats(arg: str, expected: datetime.date) -> None:
         ("1.13.2026", r"Out-of-range"),
         ("32.1.2026", r"Out-of-range"),
         ("abc", r"Invalid"),
+        ("2026-13-01", r"Invalid ISO"),
+        ("2026-02-30", r"Invalid ISO"),
     ],
     ids=[
         "trailing-dot",
@@ -74,6 +92,8 @@ def test_dot_formats(arg: str, expected: datetime.date) -> None:
         "bad-month",
         "bad-day",
         "positional-invalid",
+        "iso-bad-month",
+        "iso-bad-day",
     ],
 )
 def test_invalid_inputs(arg: str, match: str) -> None:

@@ -1028,14 +1028,26 @@ def _parse_dot_date(t_str: str) -> datetime.date:
         raise argparse.ArgumentTypeError(msg) from None
 
 
+def _parse_iso_date(t_str: str) -> datetime.date:
+    """Parse an ISO 8601 date string (YYYY-MM-DD)."""
+    try:
+        return datetime.date.fromisoformat(t_str)
+    except ValueError:
+        msg = f"Invalid ISO 8601 date: {t_str}"
+        raise argparse.ArgumentTypeError(msg) from None
+
+
 def parse_today_arg(t_str: str) -> datetime.date:
     """Parse the -t argument and return a datetime.date object.
 
     Acceptable formats:
+      - ISO 8601: YYYY-MM-DD
       - OpenBSD/Debian positional: dd, mmdd, yymmdd, ccyymmdd
       - macOS/FreeBSD dot-separated: dd.mm, dd.mm.year
     """
     t_str = t_str.strip()
+    if "-" in t_str:
+        return _parse_iso_date(t_str)
     if "." in t_str:
         return _parse_dot_date(t_str)
     # cSpell:ignore mmdd, ccyymmdd
@@ -1171,8 +1183,8 @@ def build_parser() -> argparse.ArgumentParser:
         dest="today",
         # Positional format from OpenBSD/Debian; dot-separated from macOS/FreeBSD.
         help="Act like the specified value is 'today' instead of using the current "
-        "date. Accepts [[[cc]yy]mm]dd (if yy is between 69 and 99, cc defaults "
-        "to 19; otherwise 20) or dd.mm[.year].",
+        "date. Accepts YYYY-MM-DD, [[[cc]yy]mm]dd (if yy is between 69 and 99, "
+        "cc defaults to 19; otherwise 20), or dd.mm[.year].",
     )
     # NOTE: NetBSD uses -w for "extra Friday days" (different meaning).
     # We follow the OpenBSD/Debian convention.
