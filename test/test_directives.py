@@ -99,19 +99,12 @@ class TestExtractDirectives:
 class TestLangDirective:
     """Tests for LANG= directive integration with DateStringParser."""
 
-    def test_lang_c_is_noop(self) -> None:
-        """LANG=C does not change the parser's month map."""
-        parser = DateStringParser(directives=CalendarDirectives(lang="C"))
-        assert "jan" in parser.month_map
-
-    def test_lang_posix_is_noop(self) -> None:
-        """LANG=POSIX does not change the parser's month map."""
-        parser = DateStringParser(directives=CalendarDirectives(lang="POSIX"))
-        assert "jan" in parser.month_map
-
-    def test_lang_utf8_is_noop(self) -> None:
-        """LANG=UTF-8 does not change the parser's month map."""
-        parser = DateStringParser(directives=CalendarDirectives(lang="UTF-8"))
+    @pytest.mark.parametrize("lang", ["C", "POSIX", "UTF-8"])
+    def test_noop_lang_values(self, lang: str) -> None:
+        """LANG=C/POSIX/UTF-8 does not change the parser's month map."""
+        parser = DateStringParser(
+            directives=CalendarDirectives(lang=lang),
+        )
         assert "jan" in parser.month_map
 
     @staticmethod

@@ -23,10 +23,6 @@ class TestGetSeasonsWithOffset:
         seasons = get_seasons(2026, utc_offset_hours=8)
         assert seasons["sepequinox"] == datetime.date(2026, 9, 23)
 
-    def test_zero_offset_matches_default(self):
-        """Explicit offset=0 should match the default behavior."""
-        assert get_seasons(2026) == get_seasons(2026, utc_offset_hours=0)
-
 
 class TestGetMoonPhasesWithOffset:
     """Test that UTC offset shifts moon phase dates correctly."""
@@ -45,9 +41,11 @@ class TestGetMoonPhasesWithOffset:
         assert datetime.date(2026, 6, 29) in phases_utc["fullmoon"]
         assert datetime.date(2026, 6, 30) in phases_pos["fullmoon"]
 
-    def test_zero_offset_matches_default(self):
-        """Explicit offset=0 should match the default behavior."""
-        assert get_moon_phases(2026) == get_moon_phases(2026, utc_offset_hours=0)
+
+def test_zero_offset_matches_default() -> None:
+    """Explicit offset=0 should match default for both seasons and moon phases."""
+    assert get_seasons(2026) == get_seasons(2026, utc_offset_hours=0)
+    assert get_moon_phases(2026) == get_moon_phases(2026, utc_offset_hours=0)
 
 
 class TestDiagnosticFlag:
@@ -96,20 +94,10 @@ class TestDiagnosticFlag:
 class TestCliFlags:
     """Integration tests for -l and -U flags affecting calendar output."""
 
-    def test_l_flag_affects_special_dates(self, run_calendar):
-        """The -l flag should shift astronomical dates via derived UTC offset."""
-        # Sep equinox is ~00:05 UTC; longitude -30 => UTC-2 => shifts to Sep 22
+    def test_utc_offset_affects_special_dates(self, run_calendar):
+        """UTC offset -2 (via -l or -U) shifts Sep equinox to Sep 22."""
         content = "SepEquinox\tAutumn equinox\n"
         today = datetime.date(2026, 9, 22)
-        # With utc_offset_hours=-2 (longitude=-30), equinox shifts to Sep 22
-        events = run_calendar(content, today, ahead=1, utc_offset_hours=-2)
-        assert any("Autumn equinox" in e for e in events)
-
-    def test_u_flag_affects_special_dates(self, run_calendar):
-        """The -U flag should shift astronomical dates."""
-        content = "SepEquinox\tAutumn equinox\n"
-        today = datetime.date(2026, 9, 22)
-        # UTC offset -2 shifts equinox to Sep 22
         events = run_calendar(content, today, ahead=0, utc_offset_hours=-2)
         assert any("Autumn equinox" in e for e in events)
 
@@ -123,21 +111,27 @@ class TestCliFlags:
         assert lines[0] == "UTCOffset: 5"
         assert lines[1] == "eastlongitude: 30"
 
-    def test_l_derives_utc_offset(self, capsys):
-        """When only -l is given, UTC offset is derived as longitude/15."""
-        main(["-D", "sun", "-l", "30", "-t", "20260101"])
+    @pytest.mark.parametrize(
+        ("args", "expected_offset", "expected_longitude"),
+        [
+            (["-l", "30"], "UTCOffset: 2", "eastlongitude: 30"),
+            (["-U", "-5"], "UTCOffset: -5", "eastlongitude: -75"),
+        ],
+        ids=["l-derives-utc", "u-derives-longitude"],
+    )
+    def test_derived_values(
+        self,
+        capsys: pytest.CaptureFixture[str],
+        args: list[str],
+        expected_offset: str,
+        expected_longitude: str,
+    ) -> None:
+        """When only -l or -U is given, the other value is derived."""
+        main(["-D", "sun", *args, "-t", "20260101"])
         output = capsys.readouterr().out
         lines = output.strip().splitlines()
-        assert lines[0] == "UTCOffset: 2"
-        assert lines[1] == "eastlongitude: 30"
-
-    def test_u_derives_longitude(self, capsys):
-        """When only -U is given, longitude is derived as offset*15."""
-        main(["-D", "sun", "-U", "-5", "-t", "20260101"])
-        output = capsys.readouterr().out
-        lines = output.strip().splitlines()
-        assert lines[0] == "UTCOffset: -5"
-        assert lines[1] == "eastlongitude: -75"
+        assert lines[0] == expected_offset
+        assert lines[1] == expected_longitude
 
     def test_d_sun_via_subprocess(self, tmp_path):
         """Verify -D works via the CLI entry point."""

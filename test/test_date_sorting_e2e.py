@@ -8,6 +8,8 @@ import datetime
 import io
 import sys
 
+import pytest
+
 from pylendar.pylendar import main
 
 
@@ -339,60 +341,56 @@ Oct/SatFourth-2\tHobart Show Day (TAS)
     assert result == ["Oct 22*\tHobart Show Day (TAS)"]
 
 
-def test_trailing_asterisk_mm_dd(run_calendar):
-    """Test that trailing * on MM/DD marks a fixed date as variable in output."""
-    calendar_content = """\
-07/04*\tIndependence Day
-07/04\tAlso Independence Day
-"""
-    today = datetime.date(2024, 7, 4)
-    result = run_calendar(calendar_content, today, ahead=0)
-    assert "Jul  4*\tIndependence Day" in result
-    assert "Jul  4\tAlso Independence Day" in result
+@pytest.mark.parametrize(
+    ("content", "today", "expected"),
+    [
+        (
+            "07/04*\tIndependence Day\n07/04\tAlso Independence Day\n",
+            datetime.date(2024, 7, 4),
+            ["Jul  4*\tIndependence Day", "Jul  4\tAlso Independence Day"],
+        ),
+        (
+            "Jul 4*\tIndependence Day\n",
+            datetime.date(2024, 7, 4),
+            ["Jul  4*\tIndependence Day"],
+        ),
+    ],
+    ids=["mm-dd-star", "month-dd-star"],
+)
+def test_trailing_asterisk(run_calendar, content, today, expected):
+    """Test trailing * marks a fixed date as variable in output."""
+    result = run_calendar(content, today, ahead=0)
+    assert result == expected
 
 
-def test_trailing_asterisk_month_dd(run_calendar):
-    """Test that trailing * on Month DD marks a fixed date as variable in output."""
-    calendar_content = """\
-Jul 4*\tIndependence Day
-"""
-    today = datetime.date(2024, 7, 4)
-    result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Jul  4*\tIndependence Day"]
-
-
-def test_full_date_yyyy_slash(run_calendar):
-    """Test YYYY/M/D format from judaic calendar files."""
-    calendar_content = """\
-2026/2/17\tRosh Chodesh Adar
-2026/2/18\tRosh Chodesh Adar II
-"""
-    today = datetime.date(2026, 2, 17)
-    result = run_calendar(calendar_content, today, ahead=1)
-    assert result == [
-        "Feb 17\tRosh Chodesh Adar",
-        "Feb 18\tRosh Chodesh Adar II",
-    ]
-
-
-def test_full_date_yyyy_slash_with_asterisk(run_calendar):
-    """Test YYYY/M/D* format marks date as variable in output."""
-    calendar_content = """\
-2026/2/17*\tRosh Chodesh Adar
-"""
-    today = datetime.date(2026, 2, 17)
-    result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Feb 17*\tRosh Chodesh Adar"]
-
-
-def test_full_date_iso_format(run_calendar):
-    """Test YYYY-MM-DD ISO date format."""
-    calendar_content = """\
-2026-02-17\tISO format event
-"""
-    today = datetime.date(2026, 2, 17)
-    result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Feb 17\tISO format event"]
+@pytest.mark.parametrize(
+    ("content", "today", "ahead", "expected"),
+    [
+        (
+            "2026/2/17\tRosh Chodesh Adar\n2026/2/18\tRosh Chodesh Adar II\n",
+            datetime.date(2026, 2, 17),
+            1,
+            ["Feb 17\tRosh Chodesh Adar", "Feb 18\tRosh Chodesh Adar II"],
+        ),
+        (
+            "2026/2/17*\tRosh Chodesh Adar\n",
+            datetime.date(2026, 2, 17),
+            0,
+            ["Feb 17*\tRosh Chodesh Adar"],
+        ),
+        (
+            "2026-02-17\tISO format event\n",
+            datetime.date(2026, 2, 17),
+            0,
+            ["Feb 17\tISO format event"],
+        ),
+    ],
+    ids=["yyyy-slash", "yyyy-slash-star", "iso-format"],
+)
+def test_full_date_formats(run_calendar, content, today, ahead, expected):
+    """Test YYYY/M/D, YYYY/M/D*, and YYYY-MM-DD formats."""
+    result = run_calendar(content, today, ahead=ahead)
+    assert result == expected
 
 
 def test_full_date_wrong_year_no_match(run_calendar):
@@ -421,18 +419,8 @@ Feb 19\tMonth DD event
     ]
 
 
-def test_dd_month_format(run_calendar):
-    """Test DD Month format (e.g., 01 Jan, 21 Apr)."""
-    calendar_content = """\
-01 Jan\tNew Year's Day
-"""
-    today = datetime.date(2026, 1, 1)
-    result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Jan  1\tNew Year's Day"]
-
-
-def test_dd_month_mixed_with_month_dd(run_calendar):
-    """Test DD Month and Month DD formats coexist and sort correctly."""
+def test_dd_month_formats(run_calendar):
+    """Test DD Month format and coexistence with Month DD format."""
     calendar_content = """\
 01 Jan\tDD Month format
 Jan 02\tMonth DD format
@@ -445,20 +433,8 @@ Jan 02\tMonth DD format
     ]
 
 
-def test_month_slash_dd_format(run_calendar):
-    """Test Month/DD format (e.g., apr/01, dec/07)."""
-    calendar_content = """\
-apr/01\tApril Fools
-dec/07\tPearl Harbor Day
-jan/06\tEpiphany
-"""
-    today = datetime.date(2026, 4, 1)
-    result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Apr  1\tApril Fools"]
-
-
-def test_month_slash_dd_with_ordinal(run_calendar):
-    """Test Month/DD and Month/WkdayOrdinal formats don't conflict."""
+def test_month_slash_dd_formats(run_calendar):
+    """Test Month/DD format and coexistence with Month/WkdayOrdinal."""
     calendar_content = """\
 apr/01\tApril Fools
 Apr/SunFirst\tFirst Sunday of April
@@ -555,69 +531,65 @@ Jun\tAlso June 1st (abbreviation)
     assert result == []
 
 
-def test_every_day_double_star(run_calendar):
-    """Test ** matches any arbitrary date and multiple days in a range."""
-    calendar_content = """\
-**\tDaily standup
-"""
-    today = datetime.date(2026, 3, 10)
-    result = run_calendar(calendar_content, today, ahead=2)
-    assert result == [
-        "Mar 10\tDaily standup",
-        "Mar 11\tDaily standup",
-        "Mar 12\tDaily standup",
-    ]
+@pytest.mark.parametrize(
+    ("content", "today", "ahead", "expected"),
+    [
+        (
+            "**\tDaily standup\n",
+            datetime.date(2026, 3, 10),
+            2,
+            [
+                "Mar 10\tDaily standup",
+                "Mar 11\tDaily standup",
+                "Mar 12\tDaily standup",
+            ],
+        ),
+        (
+            "* *\tDaily reminder\n",
+            datetime.date(2026, 6, 15),
+            1,
+            [
+                "Jun 15\tDaily reminder",
+                "Jun 16\tDaily reminder",
+            ],
+        ),
+    ],
+    ids=["double-star", "spaced-star"],
+)
+def test_every_day_wildcards(run_calendar, content, today, ahead, expected):
+    """Test ** and * * both match every day."""
+    result = run_calendar(content, today, ahead=ahead)
+    assert result == expected
 
 
-def test_every_day_spaced_star(run_calendar):
-    """Test * * (spaced) also matches every day."""
-    calendar_content = """\
-* *\tDaily reminder
-"""
-    today = datetime.date(2026, 6, 15)
-    result = run_calendar(calendar_content, today, ahead=1)
-    assert result == [
-        "Jun 15\tDaily reminder",
-        "Jun 16\tDaily reminder",
-    ]
-
-
-def test_month_wildcard_compact(run_calendar):
-    """Test June* matches days in June but not July."""
-    calendar_content = """\
-June*\tSummer fun
-"""
-    today = datetime.date(2026, 6, 14)
-    result = run_calendar(calendar_content, today, ahead=1)
-    assert result == [
-        "Jun 14\tSummer fun",
-        "Jun 15\tSummer fun",
-    ]
-
-    # July should not match
-    today = datetime.date(2026, 7, 1)
-    result = run_calendar(calendar_content, today, ahead=0)
-    assert result == []
-
-
-def test_month_wildcard_abbreviated(run_calendar):
-    """Test Jun* (abbreviated month) matches days in June."""
-    calendar_content = """\
-Jun*\tJune event
-"""
-    today = datetime.date(2026, 6, 30)
-    result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Jun 30\tJune event"]
-
-
-def test_month_wildcard_spaced(run_calendar):
-    """Test June * (spaced) also matches days in June."""
-    calendar_content = """\
-June *\tJune spaced
-"""
-    today = datetime.date(2026, 6, 1)
-    result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Jun  1\tJune spaced"]
+@pytest.mark.parametrize(
+    ("content", "today", "ahead", "expected"),
+    [
+        (
+            "June*\tSummer fun\n",
+            datetime.date(2026, 6, 14),
+            1,
+            ["Jun 14\tSummer fun", "Jun 15\tSummer fun"],
+        ),
+        (
+            "Jun*\tJune event\n",
+            datetime.date(2026, 6, 30),
+            0,
+            ["Jun 30\tJune event"],
+        ),
+        (
+            "June *\tJune spaced\n",
+            datetime.date(2026, 6, 1),
+            0,
+            ["Jun  1\tJune spaced"],
+        ),
+    ],
+    ids=["compact", "abbreviated", "spaced"],
+)
+def test_month_wildcards(run_calendar, content, today, ahead, expected):
+    """Test Month* and Month * match days in the given month."""
+    result = run_calendar(content, today, ahead=ahead)
+    assert result == expected
 
 
 def test_month_wildcard_vs_bare_month(run_calendar):
@@ -640,46 +612,31 @@ June*\tEvery day in June
     assert result == ["Jun 15\tEvery day in June"]
 
 
-def test_wildcard_day_no_space(run_calendar):
-    """Test *15 (no space) matches 15th of every month."""
-    calendar_content = """\
-*15\tPay rent
-"""
-    today = datetime.date(2026, 3, 15)
-    result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Mar 15\tPay rent"]
-
-    today = datetime.date(2026, 7, 15)
-    result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Jul 15\tPay rent"]
-
-
-def test_wildcard_day_space_and_no_space_equivalent(run_calendar):
-    """Test *15 and * 15 both match the same dates."""
-    calendar_content = """\
-*15\tNo space
-* 15\tWith space
-"""
-    today = datetime.date(2026, 4, 15)
-    result = run_calendar(calendar_content, today, ahead=0)
-    assert result == [
-        "Apr 15\tNo space",
-        "Apr 15\tWith space",
-    ]
-
-
-def test_wildcard_day_reversed(run_calendar):
-    """Test 15 * (reversed) matches 15th of every month."""
-    calendar_content = """\
-15 *\tPay rent
-"""
-    today = datetime.date(2026, 5, 15)
-    result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["May 15\tPay rent"]
-
-    today = datetime.date(2026, 11, 15)
-    result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Nov 15\tPay rent"]
+@pytest.mark.parametrize(
+    ("content", "today", "expected"),
+    [
+        (
+            "*15\tPay rent\n",
+            datetime.date(2026, 3, 15),
+            ["Mar 15\tPay rent"],
+        ),
+        (
+            "15 *\tPay rent\n",
+            datetime.date(2026, 5, 15),
+            ["May 15\tPay rent"],
+        ),
+        (
+            "*15\tNo space\n* 15\tWith space\n",
+            datetime.date(2026, 4, 15),
+            ["Apr 15\tNo space", "Apr 15\tWith space"],
+        ),
+    ],
+    ids=["no-space", "reversed", "space-equivalence"],
+)
+def test_wildcard_day_formats(run_calendar, content, today, expected):
+    """Test *DD, DD *, and * DD all match the given day of every month."""
+    result = run_calendar(content, today, ahead=0)
+    assert result == expected
 
 
 def test_feb_wildcard_leap_year(run_calendar):
@@ -691,16 +648,6 @@ Feb*\tFebruary event
     today = datetime.date(2024, 2, 29)
     result = run_calendar(calendar_content, today, ahead=0)
     assert result == ["Feb 29\tFebruary event"]
-
-
-def test_trailing_asterisk_variable_marker_still_works(run_calendar):
-    """Test Jul 4* trailing-asterisk variable marker still works."""
-    calendar_content = """\
-Jul 4*\tIndependence Day
-"""
-    today = datetime.date(2024, 7, 4)
-    result = run_calendar(calendar_content, today, ahead=0)
-    assert result == ["Jul  4*\tIndependence Day"]
 
 
 def test_mixed_wildcards_sort(run_calendar):
