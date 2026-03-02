@@ -1,6 +1,7 @@
 """Tests for astronomical special dates (moon phases and seasons)."""
 
 import datetime
+from itertools import pairwise
 
 from pylendar.pylendar import get_moon_phases, get_seasons
 
@@ -40,18 +41,18 @@ def test_moon_phases_roughly_monthly():
 
     # New moons should be roughly 29-30 days apart
     new_moons = sorted(moon_phases["newmoon"])
-    for i in range(len(new_moons) - 1):
-        days_between = (new_moons[i + 1] - new_moons[i]).days
+    for m1, m2 in pairwise(new_moons):
+        days_between = (m2 - m1).days
         assert 27 <= days_between <= 31, (
             f"New moons should be ~29.5 days apart, "
-            f"got {days_between} days between {new_moons[i]} and {new_moons[i + 1]}"
+            f"got {days_between} days between {m1} and {m2}"
         )
 
     # Full moons should also be roughly 29-30 days apart
     full_moons = sorted(moon_phases["fullmoon"])
-    for i in range(len(full_moons) - 1):
-        days_between = (full_moons[i + 1] - full_moons[i]).days
+    for m1, m2 in pairwise(full_moons):
+        days_between = (m2 - m1).days
         assert 27 <= days_between <= 31, (
             f"Full moons should be ~29.5 days apart, "
-            f"got {days_between} days between {full_moons[i]} and {full_moons[i + 1]}"
+            f"got {days_between} days between {m1} and {m2}"
         )

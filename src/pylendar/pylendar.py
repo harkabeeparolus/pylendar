@@ -284,7 +284,7 @@ def cli(argv: list[str] | None = None) -> None:
 
     utc_offset, longitude = resolve_coordinates(args.U, args.l)
 
-    if args.D is not None:
+    if args.D:
         print_diagnostic(args.D, args.today.year, utc_offset, longitude)
         return
 
@@ -950,12 +950,16 @@ def parse_special_dates(
     date_exprs["chinesenewyear"] = ResolvedDate.of(LunarDate(year, 1, 1).toSolarDate())
 
     # Add astronomical season dates
-    for name, date in get_seasons(year, utc_offset_hours).items():
-        date_exprs[name] = ResolvedDate.of(date)
+    date_exprs |= {
+        name: ResolvedDate.of(date)
+        for name, date in get_seasons(year, utc_offset_hours).items()
+    }
 
     # Add moon phases as recurring dates
-    for name, dates in get_moon_phases(year, utc_offset_hours).items():
-        date_exprs[name] = ResolvedDate(frozenset(dates))
+    date_exprs |= {
+        name: ResolvedDate(frozenset(dates))
+        for name, dates in get_moon_phases(year, utc_offset_hours).items()
+    }
 
     # Parse aliases from calendar file
     for line in calendar_lines:
