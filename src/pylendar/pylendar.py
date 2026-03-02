@@ -46,21 +46,11 @@ Supported Date Formats:
     - Month           (e.g., June) - the 1st of that month
 
 Example calendar file (save as 'calendar'):
-#------------------------------------------
-# My Personal Calendar
-#------------------------------------------
 01/01	New Year's Day
-Easter  Happy Easter!
+Easter	Happy Easter!
 Jul 4	US Independence Day
 12/25	Christmas Day
-
 * 15	Pay the rent
-
-07/09	Finish the Python calendar script
-07/10	Deploy the new script
-07/11	TGIF
-07/14	Monday morning meeting
-#------------------------------------------
 """
 
 import argparse
@@ -260,12 +250,11 @@ class NthWeekdayEveryMonth(DateExpr):
 
     def resolve(self, year: int) -> DateSet:
         """Return the Nth weekday for each of the 12 months."""
-        dates: DateSet = set()
-        for month in range(1, 13):
-            result = _find_nth_weekday(year, month, self.weekday, self.n)
-            if result:
-                dates.add(result)
-        return dates
+        return {
+            r
+            for m in range(1, 13)
+            if (r := _find_nth_weekday(year, m, self.weekday, self.n))
+        }
 
 
 @dataclass(frozen=True)
@@ -318,10 +307,8 @@ def cli(argv: list[str] | None = None) -> None:
     """Command-line interface for the calendar utility."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.verbose > 0:
-        logging.getLogger().setLevel(logging.DEBUG)
-    else:
-        logging.getLogger().setLevel(logging.INFO)
+    level = logging.DEBUG if args.verbose else logging.INFO
+    logging.getLogger().setLevel(level)
 
     utc_offset, longitude = resolve_coordinates(args.U, args.l)
 
@@ -1223,36 +1210,14 @@ def get_ahead_behind(
     *,
     friday: int = 4,
 ) -> tuple[int, int]:
-    """Determine the number of days to look ahead and behind based on the arguments.
-
-    Args:
-        today: The current date
-        ahead: Number of days ahead to look (None for default behavior)
-        behind: Number of days behind to look (default: 0)
-        friday: Which Python weekday (0=Mon..6=Sun) triggers the 3-day look-ahead.
-            Default 4 (Friday).
-
-    Returns:
-        tuple: (ahead_days, behind_days)
-
-    """
+    """Determine the number of days to look ahead and behind."""
     weekday = today.weekday()
     ahead_days = ahead if ahead is not None else 3 if weekday == friday else 1
-    behind_days = behind
-    return ahead_days, behind_days
+    return ahead_days, behind
 
 
 def replace_age_in_description(description: str, check_date: datetime.date) -> str:
-    """Replace [YYYY] with calculated age in event description.
-
-    Args:
-        description: Event description that may contain [YYYY] placeholder
-        check_date: Date to calculate age from
-
-    Returns:
-        Description with [YYYY] replaced by age, or original if no placeholder
-
-    """
+    """Replace [YYYY] with calculated age in event description."""
     if match := re.search(r"\[(\d{4})\]", description):
         year_val = int(match.group(1))
         age = check_date.year - year_val
@@ -1299,14 +1264,7 @@ def get_matching_events(
 
 
 def find_calendar(look_in: Sequence[Path]) -> Path:
-    """Find the calendar file in standard locations.
-
-    The BSD calendar(1) utility uses chdir to the calendar directory so that
-    relative #include paths resolve correctly. We don't need that here because
-    SimpleCPP.resolve_include() already passes each file's parent directory as
-    look_first, resolving includes relative to the including file (correct C
-    preprocessor semantics) without relying on the process working directory.
-    """
+    """Find the calendar file in standard locations."""
     calendar_dir = os.environ.get("CALENDAR_DIR")
     first = Path(calendar_dir) if calendar_dir else Path.cwd()
     dirs = [first, *look_in]
