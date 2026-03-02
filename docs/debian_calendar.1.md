@@ -5,12 +5,13 @@ header: General Commands Manual
 date: January 29, 2019
 footer: calendar 12.1.8 (bsdmainutils)
 ---
+<!-- markdownlint-disable single-h1 -->
 
-## NAME
+# NAME
 
 **calendar** — reminder service
 
-## SYNOPSIS
+# SYNOPSIS
 
 **calendar**
 \[**-abw**]
@@ -21,7 +22,7 @@ footer: calendar 12.1.8 (bsdmainutils)
 \[**-f** *calendarfile*]
 \[**-t** \[\[\[*cc*]*yy*]*mm*]*dd*]
 
-## DESCRIPTION
+# DESCRIPTION
 
 The **calendar** utility checks the current directory or the directory
 specified by the `CALENDAR_DIR` environment variable for a file named
@@ -135,7 +136,7 @@ Ostern-2\tGood Friday (2 days before Easter)
 Paskha\tOrthodox Easter
 ```
 
-## FILES
+# FILES
 
 | Path | Description |
 |---|---|
@@ -167,17 +168,17 @@ Paskha\tOrthodox Easter
 | *calendar.usholiday* | U.S. holidays. |
 | *calendar.world* | world wide calendar. |
 
-## SEE ALSO
+# SEE ALSO
 
 at(1), cal(1), cpp(1), mail(1), cron(8)
 
-## STANDARDS
+# STANDARDS
 
 The **calendar** program previously selected lines which had the correct
 date anywhere in the line. This is no longer true: the date is only
 recognized when it occurs at the beginning of a line.
 
-## COMPATIBILITY
+# COMPATIBILITY
 
 The **calendar** command will only display lines that use a \<tab>
 character to separate the date and description, or that begin with a
@@ -189,10 +190,10 @@ accept 0 as an argument to the **-A** flag.
 
 Using `utf-8` as the locale name is a Debian-specific enhancement.
 
-## HISTORY
+# HISTORY
 
 A **calendar** command appeared in Version 7 AT&T UNIX.
 
-## BUGS
+# BUGS
 
 **calendar** doesn't handle all Jewish holidays or moon phases.

@@ -5,12 +5,13 @@ header: General Commands Manual
 date: February 21, 2025
 footer: OpenBSD-current
 ---
+<!-- markdownlint-disable single-h1 -->
 
-## NAME
+# NAME
 
 **calendar** — reminder service
 
-## SYNOPSIS
+# SYNOPSIS
 
 **calendar**
 \[**-abw**]
@@ -19,7 +20,7 @@ footer: OpenBSD-current
 \[**-f** *calendarfile*]
 \[**-t** \[\[\[*cc*]*yy*]*mm*]*dd*]
 
-## DESCRIPTION
+# DESCRIPTION
 
 The **calendar** utility checks the current directory or the directory
 specified by the `CALENDAR_DIR` environment variable for a file named
@@ -124,7 +125,7 @@ Ostern-2\tGood Friday (2 days before Easter)
 Paskha\tOrthodox Easter
 ```
 
-## FILES
+# FILES
 
 | Path | Description |
 |---|---|
@@ -156,20 +157,20 @@ Paskha\tOrthodox Easter
 | *calendar.usholiday* | U.S. holidays. |
 | *calendar.world* | world wide calendar. |
 
-## SEE ALSO
+# SEE ALSO
 
 at(1), cal(1), cpp(1), mail(1), cron(8)
 
-## STANDARDS
+# STANDARDS
 
 The **calendar** program previously selected lines which had the correct
 date anywhere in the line. This is no longer true: the date is only
 recognized when it occurs at the beginning of a line.
 
-## HISTORY
+# HISTORY
 
 A **calendar** command appeared in Version 7 AT&T UNIX.
 
-## BUGS
+# BUGS
 
 **calendar** doesn't handle all Jewish holidays or moon phases.

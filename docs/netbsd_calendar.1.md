@@ -5,12 +5,13 @@ header: General Commands Manual
 date: June 1, 2016
 footer: NetBSD 10.1
 ---
+<!-- markdownlint-disable single-h1 -->
 
-## NAME
+# NAME
 
 **calendar** — reminder service
 
-## SYNOPSIS
+# SYNOPSIS
 
 **calendar**
 \[**-avx**]
@@ -19,7 +20,7 @@ footer: NetBSD 10.1
 \[**-l** *days*]
 \[**-w** *days*]
 
-## DESCRIPTION
+# DESCRIPTION
 
 The **calendar** utility checks the current directory or the directory
 specified by the `CALENDAR_DIR` environment variable for a file named
@@ -104,7 +105,7 @@ June*\tEvery day of June.
 **\tEvery day.
 ```
 
-## FILES
+# FILES
 
 | Path | Description |
 |---|---|
@@ -119,7 +120,7 @@ June*\tEvery day of June.
 | *calendar.netbsd* | Important dates in the history of the NetBSD project. |
 | *calendar.usholiday* | U.S. holidays. This calendar should be updated yearly by the local system administrator so that roving holidays are set correctly for the current year. |
 
-## COMPATIBILITY
+# COMPATIBILITY
 
 The **calendar** program previously selected lines which had the correct
 date anywhere in the line. This is no longer true, the date is only
@@ -127,15 +128,15 @@ recognized when it occurs first on the line. In NetBSD 3.0, the
 **calendar** command was modified to search the user's home directory
 instead of the current directory by default.
 
-## SEE ALSO
+# SEE ALSO
 
 at(1), cpp(1), cron(8)
 
-## HISTORY
+# HISTORY
 
 A **calendar** command appeared in Version 7 AT&T UNIX.
 
-## BUGS
+# BUGS
 
 **calendar** doesn't handle events that move around from year to year,
 i.e., "the last Monday in April". The **-a** option ignores the user's

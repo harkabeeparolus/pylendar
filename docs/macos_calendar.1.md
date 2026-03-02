@@ -5,12 +5,13 @@ header: General Commands Manual
 date: December 17, 2023
 footer: macOS 26.3
 ---
+<!-- markdownlint-disable single-h1 -->
 
-## NAME
+# NAME
 
 **calendar** — reminder service
 
-## SYNOPSIS
+# SYNOPSIS
 
 **calendar**
 \[**-A** *num*]
@@ -25,7 +26,7 @@ footer: macOS 26.3
 \[**-U** *UTC-offset*]
 \[**-W** *num*]
 
-## DESCRIPTION
+# DESCRIPTION
 
 The **calendar** utility checks the current directory for a file named
 *calendar* and displays lines that fall into the specified date range.
@@ -82,7 +83,7 @@ The following options are available:
 : Print lines from today and the next *num* days (forward, future).
   Ignore weekends when calculating the number of days.
 
-## FILE FORMAT
+# FILE FORMAT
 
 To handle calendars in your national code table you can specify
 `LANG=<locale_name>` in the calendar file as early as possible.
@@ -181,7 +182,7 @@ Ostern-2\tGood Friday (2 days before Easter)
 Paskha\tOrthodox Easter
 ```
 
-## FILES
+# FILES
 
 | Path | Description |
 |---|---|
@@ -196,21 +197,21 @@ The order of precedence in searches for a calendar file is: current
 directory, ~/.calendar, /usr/local/share/calendar, /usr/share/calendar.
 Files of similar names are ignored in lower precedence locations.
 
-## COMPATIBILITY
+# COMPATIBILITY
 
 The **calendar** program previously selected lines which had the correct
 date anywhere in the line. This is no longer true, the date is only
 recognized when it occurs at the beginning of a line.
 
-## SEE ALSO
+# SEE ALSO
 
 at(1), mail(1), cron(8)
 
-## HISTORY
+# HISTORY
 
 A **calendar** command appeared in Version 7 AT&T UNIX.
 
-## NOTES
+# NOTES
 
 Chinese New Year is calculated at 120 degrees east of Greenwich, which
 roughly corresponds with the east coast of China. For people west of
@@ -229,7 +230,7 @@ Because of minor differences between the output of the formulas used and
 other sources on the Internet, Druids and Werewolves should double-check
 the start and end time of solar and lunar events.
 
-## BUGS
+# BUGS
 
 The **calendar** does only recognise the cpp directives #include,
 \#define, #ifdef, #ifndef and #else. It supports nested conditions, but

@@ -5,6 +5,7 @@ header: General Commands Manual
 date: March 2026
 footer: pylendar 0.5.0
 ---
+<!-- markdownlint-disable single-h1 -->
 
 # NAME
 
