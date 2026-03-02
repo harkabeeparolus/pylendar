@@ -52,11 +52,10 @@ Three main components:
 
 Tests are in `test/` directory:
 
-- `test_cpp.py` - SimpleCPP preprocessor tests (includes, circular detection)
-- `test_coverage_gaps.py` - Targeted unit tests for edge cases (age replacement, aliases, impossible dates, include errors, fallback paths)
-- `test_date_sorting_e2e.py` - Integration tests for event sorting with mixed date formats
-- `test_directives.py` - LANG= and SEQUENCE= directive parsing
-- `test_find_calendar.py` - Calendar file discovery and CALENDAR_DIR support
+- `test_cpp.py` - SimpleCPP preprocessor tests (includes, circular detection, edge cases)
+- `test_date_sorting_e2e.py` - Integration tests for event sorting with mixed date formats, plus unit-level edge cases (age replacement, Event comparison, impossible dates, unparseable lines)
+- `test_directives.py` - LANG= and SEQUENCE= directive parsing, special-date aliases, DateStringParser edge cases
+- `test_find_calendar.py` - Calendar file discovery, CALENDAR_DIR support, and fallback paths
 - `test_friday_weekend_flags.py` - -F (friday) and -W (weekend-ignore) flags
 - `test_longitude_utc.py` - UTC offset, longitude, and astronomical date flags
 - `test_parse_today.py` - -t flag date parsing (various formats)

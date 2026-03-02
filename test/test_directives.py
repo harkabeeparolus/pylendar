@@ -10,6 +10,7 @@ from pylendar.pylendar import (
     CalendarDirectives,
     DateStringParser,
     extract_directives,
+    parse_special_dates,
 )
 
 # ---------------------------------------------------------------------------
@@ -219,6 +220,38 @@ class TestSequenceDirective:
         assert expr is not None
         dates = expr.resolve(2026)
         assert datetime.date(2026, 10, 10) in dates
+
+
+# ---------------------------------------------------------------------------
+# parse_special_dates aliases and DateStringParser edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestParseSpecialDatesAliases:
+    """Tests for alias directives (left=right) in parse_special_dates."""
+
+    def test_right_side_known_alias(self) -> None:
+        """myfeast=Easter — right side known, left gets the value."""
+        date_exprs = parse_special_dates(["myfeast=Easter"], 2026)
+        assert "myfeast" in date_exprs
+        easter_dates = date_exprs["easter"].resolve(2026)
+        assert date_exprs["myfeast"].resolve(2026) == easter_dates
+
+    def test_left_side_known_alias(self) -> None:
+        """Easter=spring — left side known, right gets the value."""
+        date_exprs = parse_special_dates(["Easter=spring"], 2026)
+        assert "spring" in date_exprs
+        easter_dates = date_exprs["easter"].resolve(2026)
+        assert date_exprs["spring"].resolve(2026) == easter_dates
+
+
+class TestParseUnknownSpecialDateOffset:
+    """Tests for unknown base in special-date-with-offset pattern."""
+
+    def test_bogus_date_with_offset_returns_none(self) -> None:
+        """bogusdate+3 is not in date_exprs, so parse returns None."""
+        parser = DateStringParser()
+        assert parser.parse("bogusdate+3") is None
 
 
 # ---------------------------------------------------------------------------

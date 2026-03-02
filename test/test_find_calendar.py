@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from pylendar.pylendar import find_calendar
 
 
@@ -45,3 +47,14 @@ def test_calendar_dir_missing_falls_through(tmp_path, monkeypatch):
 
     result = find_calendar([fallback])
     assert result == (fallback / "calendar").resolve()
+
+
+def test_returns_default_when_nothing_found(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Falls back to Path('calendar') when no file exists."""
+    monkeypatch.delenv("CALENDAR_DIR", raising=False)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path / "fakehome"))
+    result = find_calendar([])
+    assert result == Path("calendar")
