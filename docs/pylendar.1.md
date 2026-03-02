@@ -38,11 +38,10 @@ The program may be invoked as either **pylendar** or **calendar**.
 The following options are available:
 
 **-A** *num*
-: Print lines from today and the next *num* days (forward, future).
-  Default is 1, except on Fridays when the default is 3.
-  **-A** and **-W** are mutually exclusive.
-  Note: unlike FreeBSD, this sets the *total* look-ahead rather than
-  adding to the base offset. See [COMPATIBILITY](#compatibility).
+: Print lines from today and the next *num* business days (forward,
+  future). Weekend days following "Friday" are included for free (they
+  do not count against *num*). Default is 1, except on Fridays when the
+  default is 3. **-A** and **-W** are mutually exclusive.
 
 **-B** *num*
 : Print lines from today and the previous *num* days (backward, past).
@@ -83,11 +82,9 @@ The following options are available:
 : Increase verbosity (can be used multiple times).
 
 **-W** *num*
-: Print lines from today and the next *num* days (forward, future).
-  Disables the Friday look-ahead expansion.
+: Print lines from today and the next *num* calendar days (forward,
+  future). No Friday/weekend expansion is applied.
   **-A** and **-W** are mutually exclusive.
-  Note: unlike FreeBSD, this sets the *total* look-ahead rather than
-  adding to the base offset. See [COMPATIBILITY](#compatibility).
 
 **-w**
 : Print the day of the week name in front of each event. Follows the
@@ -240,27 +237,11 @@ directory, ~/.calendar, $XDG_CONFIG_HOME/calendar, /etc/calendar,
 implementations (FreeBSD, macOS, OpenBSD, NetBSD, and Debian). The
 following differences exist:
 
-**-A / -W total look-ahead semantics**
-: FreeBSD treats **-A** and **-W** as *additional* days on top of the
-  base look-ahead offset (3 on Friday, 1 otherwise). **pylendar** treats
-  the value as the *total* look-ahead, replacing the default. The two
-  behave identically when no explicit **-A** or **-W** is given.
-
-  Non-Friday comparison:
-
-  | Scenario | FreeBSD | pylendar |
-  |---|---|---|
-  | default | today + 1 (2 days) | today + 1 (2 days) |
-  | -A 0 | today + 1 (2 days) | today (1 day) |
-  | -A 2 | today + 3 (4 days) | today + 2 (3 days) |
-
-  Friday comparison:
-
-  | Scenario | FreeBSD | pylendar |
-  |---|---|---|
-  | default | today + 3 (4 days) | today + 3 (4 days) |
-  | -A 2 | today + 5 (6 days) | today + 2 (3 days) |
-  | -W 5 | today + 6 (7 days) | today + 5 (6 days) |
+**-A / -W semantics match macOS/FreeBSD**
+: **-A** counts business days, expanding weekends for free (matching
+  macOS/FreeBSD). **-W** counts plain calendar days with no expansion
+  (also matching macOS/FreeBSD). The default (no flag) matches all
+  implementations.
 
 **No -a or -d options**
 : The **-a** flag (mail all users) is intentionally not implemented.

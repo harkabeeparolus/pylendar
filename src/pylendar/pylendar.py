@@ -9,41 +9,13 @@
 # ]
 # ///
 
-"""A simple Python implementation of the BSD calendar(1) utility.
+"""A Python implementation of the BSD calendar(1) utility.
 
-This script reads a text file with dated events and prints the events
-scheduled for today and tomorrow. If today is a Friday, it also includes
-events for Saturday, Sunday, and Monday.
+Reads a text file with dated events and prints the events scheduled
+for today and upcoming days.  See ``pylendar(1)`` for full documentation.
 
 Usage:
-    python calendar.py [-f /path/to/calendar_file]
-
-The calendar file should have one event per line, formatted as:
-    <Date><TAB><Event Description>
-
-Supported Date Formats:
-    - YYYY/M/D        (e.g., 2026/2/17) - specific date with year
-    - YYYY-MM-DD      (e.g., 2026-02-17) - ISO date format
-    - MM/DD           (e.g., 07/09)
-    - Month DD        (e.g., Jul 9, July 9)
-    - * DD / *DD      (e.g., * 9, *15) - DDth of every month
-    - DD *            (e.g., 15 *) - DDth of every month (reversed)
-    - **  / * *       Every day of the year
-    - Month* / Month *(e.g., June*, Jun *) - every day of that month
-    - Month Wkday+N   (e.g., May Sun+2) - Nth weekday of a month
-    - Month Wkday-N   (e.g., May Mon-1) - last Nth weekday of a month
-    - MM/Wkday+N      (e.g., 03/Sun-1) - Nth weekday of numbered month
-    - MM/WkdayOrd     (e.g., 10/MonSecond) - Nth weekday using ordinal
-    - Month/WkdayOrd  (e.g., Oct/SatFourth-2) - with optional day offset
-    - Month/DD        (e.g., apr/01) - month name with slash
-    - * Wkday+N       (e.g., * Fri+3) - Nth weekday of every month
-    - WkdayOrd Month  (e.g., SunFirst Aug) - ordinal weekday then month
-    - DD Month        (e.g., 01 Jan) - day then month name
-    - Easter          Catholic Easter
-    - ChineseNewYear  First day of the Chinese year
-    - Special+/-N     (e.g., Easter-2, FullMoon+1) - offset from special date
-    - Weekday         (e.g., Friday) - every occurrence in the year
-    - Month           (e.g., June) - the 1st of that month
+    pylendar [-f /path/to/calendar_file]
 
 Example calendar file (save as 'calendar'):
 01/01	New Year's Day
@@ -329,6 +301,7 @@ def cli(argv: list[str] | None = None) -> None:
         ahead=ahead_value,
         behind=args.B,
         friday=friday,
+        expand_weekends=args.A is not None,
         weekday=args.w,
         utc_offset_hours=utc_offset,
         include_dirs=DEFAULT_CALENDAR_PATHS,
@@ -357,6 +330,7 @@ class CalendarOptions:
     ahead: int | None = None
     behind: int = 0
     friday: int = 4
+    expand_weekends: bool = False
     weekday: bool = False
     utc_offset_hours: float = 0
     include_dirs: Sequence[Path] = ()
@@ -378,7 +352,13 @@ def process_calendar(
     ahead_days, behind_days = get_ahead_behind(
         today, ahead=opts.ahead, behind=opts.behind, friday=opts.friday
     )
-    dates_to_check = get_dates_to_check(today, ahead=ahead_days, behind=behind_days)
+    dates_to_check = get_dates_to_check(
+        today,
+        ahead_days,
+        behind_days,
+        friday=opts.friday,
+        expand_weekends=opts.expand_weekends,
+    )
     date_exprs = parse_special_dates(calendar_lines, today.year, opts.utc_offset_hours)
     directives = extract_directives(calendar_lines)
     date_parser = DateStringParser(date_exprs, directives=directives)
@@ -1088,12 +1068,32 @@ def parse_today_arg(t_str: str) -> datetime.date:
 
 
 def get_dates_to_check(
-    today: datetime.date, ahead: int = 1, behind: int = 0
+    today: datetime.date,
+    ahead: int = 1,
+    behind: int = 0,
+    *,
+    friday: int = 4,
+    expand_weekends: bool = False,
 ) -> DateSet:
     """Determine the set of dates to check for events, given -A and -B options."""
-    return {
-        today + datetime.timedelta(days=offset) for offset in range(-behind, ahead + 1)
-    }
+    day = datetime.timedelta(days=1)
+    dates: DateSet = {today + day * d for d in range(-behind, 1)}
+    if not expand_weekends:
+        dates.update(today + day * d for d in range(1, ahead + 1))
+        return dates
+    # Business-day walk (macOS/FreeBSD -A): landing on the day after "Friday"
+    # makes that step and the next free (don't decrement the counter).
+    saturday, remaining, current, skip = (friday + 1) % 7, ahead, today, False
+    while remaining > 0:
+        current += day
+        dates.add(current)
+        if skip:
+            skip = False
+        elif current.weekday() == saturday:
+            skip = True
+        else:
+            remaining -= 1
+    return dates
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1112,7 +1112,8 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         metavar="num",
-        help="Print lines from today and next num days (forward, future). "
+        help="Print lines from today and next num business days (forward, future). "
+        "Weekend days after 'Friday' are included for free. "
         "Defaults to 1, except on Fridays the default is 3.",
     )
     ahead_group.add_argument(
@@ -1120,9 +1121,8 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         metavar="num",
-        # FreeBSD/macOS equivalent of -A that disables Friday look-ahead.
-        help="Print lines from today and next num days (forward, future). "
-        "Disables the Friday look-ahead expansion.",
+        help="Print lines from today and next num calendar days (forward, future). "
+        "No Friday/weekend expansion.",
     )
     parser.add_argument(
         "-B",

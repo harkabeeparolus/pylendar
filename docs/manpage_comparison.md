@@ -105,32 +105,13 @@ full directive set).
 
 ### `-A` / `-W` range semantics
 
-FreeBSD's range formula is `[today − B, today + offset + A]` where `offset`
-is a base look-ahead (3 on Friday, 1 otherwise). `-A` and `-W` set the
-*additional* days (`f_dayAfter`) on top of that offset, and `-W` forces
-`offset = 1` by setting `Friday = −1`.
+Pylendar now matches macOS/FreeBSD semantics for both flags:
 
-Pylendar treats the `-A` / `-W` value as the *total* look-ahead, replacing
-the default rather than stacking. The two behave identically when no
-explicit `-A` or `-W` is given.
-
-| Scenario (non-Friday) | FreeBSD | Pylendar |
-|---|---|---|
-| default (no flags) | today + 1 (2 days) | today + 1 (2 days) |
-| `-A 0` | today + 1 (2 days) | today (1 day) |
-| `-A 2` | today + 3 (4 days) | today + 2 (3 days) |
-| `-A 5` | today + 6 (7 days) | today + 5 (6 days) |
-
-| Scenario (Friday) | FreeBSD | Pylendar |
-|---|---|---|
-| default (no flags) | today + 3 (4 days) | today + 3 (4 days) |
-| `-A 2` | today + 5 (6 days) | today + 2 (3 days) |
-| `-W 5` | today + 6 (7 days) | today + 5 (6 days) |
-
-The FreeBSD manpage describes `-W` as "ignore weekends when calculating the
-number of days." The source code (`calendar.c`) reveals this means disabling
-the Friday look-ahead expansion — it does **not** count business days or
-skip weekend dates from the output.
+- **`-A`** counts business days. Weekend days following "Friday" are
+  included for free (they don't count against *num*).
+- **`-W`** counts plain calendar days with no Friday/weekend expansion.
+- The **default** (no flag) uses the Friday look-ahead logic (ahead=3 on
+  Friday, 1 otherwise) and matches all implementations.
 
 ## Manpage Sections
 
