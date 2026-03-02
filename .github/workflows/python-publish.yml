@@ -25,6 +25,15 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v6
 
+      - name: Install pandoc
+        run: sudo apt-get update && sudo apt-get install -y pandoc
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Build manpage
+        run: just build_man
+
       - name: Build release distributions
         run: |
           uv build

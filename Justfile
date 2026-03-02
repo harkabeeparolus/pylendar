@@ -18,8 +18,14 @@ run *ARGS:
 install:
     uv sync
 
+# Build manpage from Markdown source (requires pandoc)
+build_man:
+    mkdir -p share/man/man1
+    pandoc docs/pylendar.1.md -s -t man -o share/man/man1/pylendar.1
+    printf '.so man1/pylendar.1\n' > share/man/man1/calendar.1
+
 # Build the package (sdist + wheel)
-build:
+build: build_man
     uv build
 
 # Run all tests

@@ -18,6 +18,7 @@ ruff format              # format source code
 uv run mypy src          # type checking (strict mode)
 uv run ty check          # type checking
 uv run pylendar          # run pylendar CLI
+just build_man           # build manpage (requires pandoc)
 ```
 
 ## Design
@@ -68,3 +69,14 @@ Coverage is at 97% with branch coverage enabled. Untestable boilerplate (depende
 ## Linting and Type Checking
 
 Ruff is configured with strict "ALL" rules. Pylint runs on both `src/` and `test/` directories. Both allow f-string interpolation in logging. Mypy runs in strict mode; ty is also used. Type stubs for `astronomy-engine` are in `typings/`.
+
+## Manpage
+
+The pylendar manpage source is `docs/pylendar.1.md` in Pandoc GFM Markdown format
+with YAML front matter. Run `just build_man` to convert it to troff format at
+`share/man/man1/pylendar.1` using pandoc. The built manpage is included in the
+wheel via hatchling shared-data and is not checked into git.
+
+When adding or changing command-line options, date format support, file search
+paths, or other user-visible behavior, update `docs/pylendar.1.md` to match.
+When bumping the version, update the `footer` field in the YAML front matter.

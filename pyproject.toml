@@ -22,8 +22,12 @@ calendar = "pylendar:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.hatch.version]
-path = "src/pylendar/pylendar.py"
+[tool.hatch]
+version.path = "src/pylendar/pylendar.py"
+build.artifacts = ["share/man/"]
+
+[tool.hatch.build.targets.wheel.shared-data]
+"share/man" = "share/man"
 
 [dependency-groups]
 dev = [
