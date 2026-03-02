@@ -120,7 +120,7 @@ ORDINALS_RE = "|".join(ORDINAL_MAP)
 DateSet: TypeAlias = set[datetime.date]
 
 
-class DateExpr(ABC):
+class DateExpr(ABC):  # pylint: disable=too-few-public-methods
     """A date expression that resolves to concrete dates for a given year."""
 
     variable: ClassVar[bool] = True

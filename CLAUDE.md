@@ -50,6 +50,8 @@ Three main components:
 
 ## Testing
 
+Tests use bare functions (no classes). Group related tests with `# --- section name ---` comment banners. Encode context that a class name would have provided into the function name prefix instead (e.g. `test_replace_age_*`, `test_seasons_*`).
+
 Tests are in `test/` directory:
 
 - `test_cpp.py` - SimpleCPP preprocessor tests (includes, circular detection, edge cases)

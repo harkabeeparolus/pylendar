@@ -700,43 +700,32 @@ def test_cli_smoke(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-class TestReplaceAgeInDescription:
-    """Tests for [YYYY] age replacement in event descriptions."""
-
-    def test_replaces_year_with_age(self) -> None:
-        """[1985] is replaced with 41 when checked against 2026-03-01."""
-        result = replace_age_in_description("Born [1985]", datetime.date(2026, 3, 1))
-        assert result == "Born 41"
-
-    def test_no_placeholder_unchanged(self) -> None:
-        """Description without [YYYY] is returned unchanged."""
-        result = replace_age_in_description("No year here", datetime.date(2026, 3, 1))
-        assert result == "No year here"
+def test_replace_age_replaces_year_with_age() -> None:
+    """[1985] is replaced with 41 when checked against 2026-03-01."""
+    result = replace_age_in_description("Born [1985]", datetime.date(2026, 3, 1))
+    assert result == "Born 41"
 
 
-class TestEventLt:
-    """Tests for Event comparison edge cases."""
-
-    def test_non_event_returns_not_implemented(self) -> None:
-        """Comparing Event with a non-Event returns NotImplemented."""
-        event = Event(datetime.date(2026, 1, 1), "x")
-        assert event.__lt__("not an event") is NotImplemented  # pylint: disable=unnecessary-dunder-call
+def test_replace_age_no_placeholder_unchanged() -> None:
+    """Description without [YYYY] is returned unchanged."""
+    result = replace_age_in_description("No year here", datetime.date(2026, 3, 1))
+    assert result == "No year here"
 
 
-class TestFixedDateImpossible:
-    """Tests for FixedDate with impossible month/day combinations."""
-
-    def test_feb_30_returns_empty(self) -> None:
-        """Feb 30 doesn't exist, so resolve returns an empty set."""
-        assert FixedDate(month=2, day=30).resolve(2026) == set()
+def test_event_lt_non_event_returns_not_implemented() -> None:
+    """Comparing Event with a non-Event returns NotImplemented."""
+    event = Event(datetime.date(2026, 1, 1), "x")
+    assert event.__lt__("not an event") is NotImplemented  # pylint: disable=unnecessary-dunder-call
 
 
-class TestGetMatchingEventsUnparseable:
-    """Tests for get_matching_events with an unparseable date string."""
+def test_fixed_date_feb_30_returns_empty() -> None:
+    """Feb 30 doesn't exist, so resolve returns an empty set."""
+    assert FixedDate(month=2, day=30).resolve(2026) == set()
 
-    def test_unparseable_date_returns_empty(self) -> None:
-        """A line with an unparseable date yields no events."""
-        parser = DateStringParser()
-        dates = {datetime.date(2026, 3, 1)}
-        result = get_matching_events("nonsense\tSome event", dates, parser)
-        assert result == []
+
+def test_get_matching_events_unparseable_date_returns_empty() -> None:
+    """A line with an unparseable date yields no events."""
+    parser = DateStringParser()
+    dates = {datetime.date(2026, 3, 1)}
+    result = get_matching_events("nonsense\tSome event", dates, parser)
+    assert result == []

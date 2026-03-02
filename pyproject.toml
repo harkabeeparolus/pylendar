@@ -83,7 +83,6 @@ disable = [
     "logging-fstring-interpolation",
     "logging-format-interpolation",
     "redefined-outer-name",           # pytest fixtures use this pattern
-    "too-few-public-methods",         # pytest test classes
 ]
 enable = ["useless-suppression"]
 
