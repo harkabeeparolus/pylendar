@@ -266,6 +266,31 @@ class EveryWeekday(DateExpr):
         return dates
 
 
+@dataclass(frozen=True)
+class WeekdayRelativeToDate(DateExpr):
+    """Weekday strictly before or after a fixed date (e.g., Sat>Jun 19)."""
+
+    month: int
+    day: int
+    weekday: int  # 0=Mon ... 6=Sun
+    direction: int  # -1 = before (<), +1 = after (>)
+    anchor_offset: int = 0  # day offset applied to anchor before search
+
+    def resolve(self, year: int) -> DateSet:
+        """Return the nearest weekday before/after the anchor date."""
+        try:
+            anchor = datetime.date(year, self.month, self.day) + datetime.timedelta(
+                days=self.anchor_offset
+            )
+        except ValueError:
+            return set()
+        delta = self.direction
+        candidate = anchor + datetime.timedelta(days=delta)
+        while candidate.weekday() != self.weekday:
+            candidate += datetime.timedelta(days=delta)
+        return {candidate}
+
+
 def main(argv: list[str] | None = None) -> None:
     """Run the calendar utility."""
     setup_logging()
@@ -541,6 +566,12 @@ class DateStringParser:
         if date_str in self.month_map:
             return FixedDate(self.month_map[date_str], 1)
 
+        # Weekday relative to date (e.g., Sat>Jun 19, Sun<Dec 25-7)
+        if ("<" in date_str or ">" in date_str) and (
+            result := self._parse_weekday_relative(date_str)
+        ):
+            return result
+
         return self._parse_format_patterns(date_str)
 
     def _parse_ordinal_weekday(self, date_str: str) -> DateExpr | None:
@@ -627,7 +658,7 @@ class DateStringParser:
 
     def _parse_month_dd(self, date_str: str) -> DateExpr | None:
         """Parse Month DD format (e.g., July 9, Jul 9)."""
-        match = re.fullmatch(r"([a-z]{3,24})\s+(\d{1,2})", date_str)
+        match = re.fullmatch(r"([a-z]+)\s+(\d{1,2})", date_str)
         if match:
             month_name = match.group(1)
             if month_name in self.month_map:
@@ -699,6 +730,48 @@ class DateStringParser:
             if month_name in self.month_map:
                 return FixedDate(self.month_map[month_name], int(match.group(1)))
         return None
+
+    _WKDAY_REL_RE: ClassVar[re.Pattern[str]] = re.compile(
+        r"(?P<wkday>\w+)\s*(?P<dir>[<>])\s*(?P<anchor>.+)"
+    )
+
+    _ANCHOR_OFFSET_RE: ClassVar[re.Pattern[str]] = re.compile(r"(.+?)([+-]\d+)?$")
+
+    def _parse_weekday_relative(self, date_str: str) -> DateExpr | None:
+        """Parse Wkday<Date or Wkday>Date format (e.g., Sat>Jun 19, Sun<Dec 25-7)."""
+        match = self._WKDAY_REL_RE.fullmatch(date_str)
+        if not match:
+            return None
+
+        wkday_name = match.group("wkday")
+        if wkday_name not in self.weekday_map:
+            return None
+        weekday = self.weekday_map[wkday_name]
+        direction = 1 if match.group("dir") == ">" else -1
+
+        anchor_str = match.group("anchor").strip()
+        # Extract optional +/-N offset from the anchor
+        offset_match = self._ANCHOR_OFFSET_RE.fullmatch(anchor_str)
+        if not offset_match:
+            return None
+        base_anchor = offset_match.group(1).strip()
+        anchor_offset = int(offset_match.group(2)) if offset_match.group(2) else 0
+
+        anchor_date = (
+            self._parse_month_dd(base_anchor)
+            or self._parse_dd_month(base_anchor)
+            or self._parse_mm_dd(base_anchor)
+        )
+        if not isinstance(anchor_date, FixedDate):
+            return None
+
+        return WeekdayRelativeToDate(
+            month=anchor_date.month,
+            day=anchor_date.day,
+            weekday=weekday,
+            direction=direction,
+            anchor_offset=anchor_offset,
+        )
 
     def _parse_format_patterns(self, date_str: str) -> DateExpr | None:
         """Parse regex-based date format patterns."""

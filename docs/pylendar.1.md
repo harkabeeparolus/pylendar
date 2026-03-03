@@ -158,6 +158,17 @@ are supported:
 - *Month/WkdayOrd* — with optional day offset (e.g., `Oct/SatFourth-2`)
 - *\* Wkday+N* — Nth weekday of every month (e.g., `* Fri+3`)
 - *WkdayOrd Month* — ordinal weekday then month (e.g., `SunFirst Aug`)
+- *Wkday>Month DD* — weekday strictly after a date (e.g., `Sat>Jun 19`)
+- *Wkday<Month DD* — weekday strictly before a date (e.g., `Sun<Dec 25`)
+- *Wkday>DD Month* — same, with day before month (e.g., `Sat>19 Jun`)
+- *Wkday<DD Month* — same, with day before month
+- *Wkday>MM/DD* — same, with numeric month (e.g., `Sat>06/19`)
+- *Wkday<MM/DD* — same, with numeric month
+
+The anchor date may include an offset in days: `Sun<Dec 25-7` means
+"Sunday before December 18" (i.e., the anchor is shifted by -7 days
+before the weekday search). The anchor date itself is never matched
+(strict before/after). This is a pylendar extension.
 
 Weekdays may use the ordinal names First, Second, Third, Fourth, Fifth,
 and Last.
@@ -280,6 +291,11 @@ following differences exist:
 **Once-only inclusion**
 : Included files are automatically processed at most once. No include
   guards are needed, unlike BSD implementations that use **cpp**(1).
+
+**Weekday before/after date**
+: The *Wkday>Date* and *Wkday<Date* syntax for finding the nearest
+  weekday strictly after or before a fixed date is a pylendar extension
+  not found in any BSD implementation.
 
 **NetBSD extensions**
 : Supports NetBSD date format extensions (DD \*, \*\*, Month\*) alongside

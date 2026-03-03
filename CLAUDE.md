@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Pylendar is a Python port of the BSD `calendar(1)` utility. It parses calendar files and displays upcoming relevant dates within a configurable date range.
+Pylendar is a Python port of the BSD `calendar(1)` utility. It parses calendar files and displays upcoming relevant dates within a configurable date range. The manpage source (`docs/pylendar.1.md`) is the authoritative reference for supported date formats, CLI options, file format, and compatibility notes.
 
 ## Build and Development Commands
 
@@ -29,14 +29,14 @@ There is test data from FreeBSD default calendar files in the `calendars/` subdi
 
 ## Architecture
 
-The codebase is intentionally a single file (`src/pylendar/pylendar.py`, ~600 lines) so it could be used as a standalone script in the future, via PEP 723 inline script metadata. But during development we build it as a normal Python package.
+The codebase is intentionally a single file (`src/pylendar/pylendar.py`, ~1300 lines) so it could be used as a standalone script in the future, via PEP 723 inline script metadata. But during development we build it as a normal Python package.
 
 Three main components:
 
 ### Core Classes
 
 - **Event** - Dataclass representing a calendar event (date + description), implements date-based sorting
-- **DateStringParser** - Parses date strings supporting multiple formats: MM/DD, "Month DD", wildcard "* DD", and special dates like Easter
+- **DateStringParser** - Parses date strings in several categories: fixed dates (MM/DD, "Month DD", ISO 8601), recurring/wildcard patterns, weekday-based expressions, and special dates (Easter, solstices, moon phases, etc.). See `docs/pylendar.1.md` for the complete list.
 - **SimpleCPP** - C/C++ preprocessor emulator that handles `#include` directives and removes C-style comments from calendar files
 
 ### Main Flow
@@ -55,6 +55,7 @@ Tests use bare functions (no classes). Group related tests with `# --- section n
 
 Tests are in `test/` directory:
 
+- `test_astronomical.py` - Astronomical special dates (moon phases and seasons)
 - `test_cpp.py` - SimpleCPP preprocessor tests (includes, circular detection, edge cases)
 - `test_date_sorting_e2e.py` - Integration tests for event sorting with mixed date formats, plus unit-level edge cases (age replacement, Event comparison, impossible dates, unparseable lines)
 - `test_directives.py` - LANG= and SEQUENCE= directive parsing, special-date aliases, DateStringParser edge cases
