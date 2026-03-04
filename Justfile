@@ -3,6 +3,8 @@
 # All commands need to be very simple and cross-platform compatible,
 # so they work both in bash and Powershell.
 
+set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
+
 # Default recipe lists all available commands
 _default:
     @just --list
@@ -19,13 +21,20 @@ install:
     uv sync
 
 # Build manpage from Markdown source (requires pandoc)
+[unix]
 build_man:
     mkdir -p share/man/man1
     pandoc docs/pylendar.1.md -s -t man -o share/man/man1/pylendar.1
     printf '.so man1/pylendar.1\n' > share/man/man1/calendar.1
 
 # Build the package (sdist + wheel)
+[unix]
 build: build_man
+    uv build
+
+# Build the package (sdist + wheel, no manpage on Windows)
+[windows]
+build:
     uv build
 
 # Run all tests
@@ -70,4 +79,4 @@ status:
     @uv tree --outdated
     @echo ""
     @echo "Project info:"
-    @uv run python -c "import pylendar; print(f'pylendar version: {pylendar.__version__ if hasattr(pylendar, \"__version__\") else \"dev\"}')" 2>/dev/null || echo "pylendar: not installed/importable"
+    @uv run pylendar --version

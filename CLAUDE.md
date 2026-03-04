@@ -8,15 +8,13 @@ Pylendar is a Python port of the BSD `calendar(1)` utility. It parses calendar f
 
 ## Build and Development Commands
 
-Uses `uv` for package management, `ruff` + `pylint` for linting, and `mypy` (strict) + `ty` for type checking. Run pylint on both `src/` and `test/`. A `Justfile` is provided for convenience (`just check` runs everything).
+Uses `uv` for package management, `ruff` + `pylint` for linting, and `mypy` (strict) + `ty` for type checking. Run pylint on both `src/` and `test/`. A `Justfile` is provided for convenience; run `just check` after every complete code change.
 
 ```bash
 uv sync                  # install to venv
-ruff check --fix         # linting
-uv run pylint src test   # linting
-ruff format              # format source code
-uv run mypy src          # type checking (strict mode)
-uv run ty check          # type checking
+just check               # lint, autofix, format, typecheck, and test
+just test -v test/test_foo.py  # run pytest with optional flags
+just coverage -v         # run pytest with --cov, and any other optional flags
 uv run pylendar          # run pylendar CLI
 just build_man           # build manpage (requires pandoc)
 ```
