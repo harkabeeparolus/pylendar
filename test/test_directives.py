@@ -101,6 +101,7 @@ def test_both_directives() -> None:
 
 def _locale_available(loc: str) -> bool:
     """Check whether a locale is installed on this system."""
+    saved = locale.setlocale(locale.LC_ALL)
     try:
         locale.setlocale(locale.LC_ALL, loc)
     except locale.Error:
@@ -108,7 +109,7 @@ def _locale_available(loc: str) -> bool:
     else:
         return True
     finally:
-        locale.setlocale(locale.LC_ALL, "")
+        locale.setlocale(locale.LC_ALL, saved)
 
 
 @pytest.fixture

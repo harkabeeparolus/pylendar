@@ -11,7 +11,7 @@ def run_calendar(tmp_path):
 
     def _run(calendar_content, today, **options):
         calendar_file = tmp_path / "calendar"
-        calendar_file.write_text(calendar_content)
+        calendar_file.write_text(calendar_content, encoding="utf-8")
         return process_calendar(calendar_file, today, CalendarOptions(**options))
 
     return _run
