@@ -207,6 +207,16 @@ If an included file is not referenced by a full pathname, **pylendar**
 searches for it using the same order of precedence described in
 [FILES](#files).
 
+When an `#include` path begins with a bare locale name (e.g.,
+`uk_UA/calendar.all`), **pylendar** falls back to matching directories
+with an encoding suffix (e.g., `uk_UA.KOI8-U/`). UTF-8 directories are
+preferred when multiple encodings exist. This allows BSD calendar
+collections that use bare locale names in their includes to work
+without renaming directories.
+
+Included files must be valid UTF-8. Files that cannot be decoded as
+UTF-8 are skipped with a warning.
+
 Files are included at most once (once-only inclusion), so include guards
 are not needed.
 

@@ -831,7 +831,12 @@ class SimpleCPP:
         self.included_files.add(abs_path)
 
         lines = []
-        for line in remove_comments(path.read_text(encoding="utf-8")).splitlines():
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            log.warning("Skipping %s: not valid UTF-8", path.name)
+            return []
+        for line in remove_comments(text).splitlines():
             stripped = line.strip()
 
             if stripped.startswith("#include"):
@@ -870,6 +875,27 @@ class SimpleCPP:
             candidate = base_dir / name
             if candidate.is_file():
                 return candidate.resolve()
+
+        # Locale fallback: uk_UA/foo → uk_UA.KOI8-U/foo
+        parts = name.parts
+        first = parts[0]
+        if (
+            not name.is_absolute()
+            and "_" in first
+            and "." not in first
+            and len(parts) > 1
+        ):
+            rest = Path(*parts[1:])
+            for base_dir in dirs:
+                for locale_dir in sorted(
+                    base_dir.glob(first + ".*"),
+                    key=lambda p: ("UTF-8" not in p.name, p.name),
+                ):
+                    if locale_dir.is_dir():
+                        candidate = locale_dir / rest
+                        if candidate.is_file():
+                            return candidate.resolve()
+
         return None
 
 
