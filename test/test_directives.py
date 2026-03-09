@@ -4,6 +4,7 @@ import datetime
 import locale
 import logging
 
+import dateutil.easter
 import pytest
 
 from pylendar.pylendar import (
@@ -298,3 +299,26 @@ Oct 12\tFixed date
     result = run_calendar(content, today, ahead=7)
     assert "Oct  5*\tFirst Monday of October" in result
     assert "Oct 12\tFixed date" in result
+
+
+# ---------------------------------------------------------------------------
+# Non-ASCII special-date aliases with offsets
+# ---------------------------------------------------------------------------
+
+
+def test_non_ascii_alias_with_offset() -> None:
+    """Non-ASCII alias like Påsk=Easter resolves with +/- offsets."""
+    date_exprs = parse_special_dates(["Påsk=Easter"], 2026)
+    parser = DateStringParser(date_exprs=date_exprs)
+    result = parser.parse("Påsk-47")
+    assert result is not None
+    easter = dateutil.easter.easter(2026)
+    assert easter - datetime.timedelta(days=47) in result.resolve(2026)
+
+
+def test_non_ascii_alias_offset_e2e(run_calendar):
+    """Non-ASCII alias with offset works end-to-end."""
+    content = "Påsk=Easter\nPåsk-47\tShrove Tuesday\n"
+    today = datetime.date(2026, 2, 17)
+    result = run_calendar(content, today, ahead=0)
+    assert result == ["Feb 17*\tShrove Tuesday"]
