@@ -316,6 +316,15 @@ def test_non_ascii_alias_with_offset() -> None:
     assert easter - datetime.timedelta(days=47) in result.resolve(2026)
 
 
+def test_casefold_alias_with_eszett() -> None:
+    """Alias containing ß matches via casefold (ß→ss)."""
+    date_exprs = parse_special_dates(["Fassnacht=Easter"], 2026)
+    parser = DateStringParser(date_exprs=date_exprs)
+    # casefold turns both Faßnacht and Fassnacht into fassnacht
+    result = parser.parse("Faßnacht-47")
+    assert result is not None
+
+
 def test_non_ascii_alias_offset_e2e(run_calendar):
     """Non-ASCII alias with offset works end-to-end."""
     content = "Påsk=Easter\nPåsk-47\tShrove Tuesday\n"

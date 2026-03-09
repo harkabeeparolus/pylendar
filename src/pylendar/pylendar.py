@@ -512,7 +512,7 @@ class DateStringParser:
         self.ordinal_map = dict(ORDINAL_MAP)
         if dirs.sequence:
             for word, n in zip(dirs.sequence, (1, 2, 3, 4, 5, -1), strict=True):
-                self.ordinal_map[word.lower()] = n
+                self.ordinal_map[word.casefold()] = n
         self.ordinals_re = "|".join(self.ordinal_map)
 
     @staticmethod
@@ -522,7 +522,7 @@ class DateStringParser:
         This uses the current locale at the time of execution.
         """
         return {
-            m.lower(): n
+            m.casefold(): n
             for s in (calendar.month_name, calendar.month_abbr)
             for n, m in enumerate(s)
             if m
@@ -535,7 +535,7 @@ class DateStringParser:
         This uses the current locale at the time of execution.
         """
         return {
-            d.lower(): n
+            d.casefold(): n
             for s in (calendar.day_name, calendar.day_abbr)
             for n, d in enumerate(s)
         }
@@ -546,7 +546,7 @@ class DateStringParser:
         Supports special dates, aliases, and standard date formats.
         Pattern order matters — more specific patterns are tried first.
         """
-        date_str = date_str.strip().lower()
+        date_str = date_str.strip().casefold()
 
         # Special date with offset (e.g., Easter-2, FullMoon+1)
         # Must precede plain special-date lookup
@@ -1067,8 +1067,8 @@ def parse_special_dates(
     for line in calendar_lines:
         if "=" in line and "\t" not in line:
             left, right = line.split("=", 1)
-            left = left.strip().lower()
-            right = right.strip().lower()
+            left = left.strip().casefold()
+            right = right.strip().casefold()
             # If either side is a known date expr, add the alias
             if left in date_exprs and right not in date_exprs:
                 date_exprs[right] = date_exprs[left]
