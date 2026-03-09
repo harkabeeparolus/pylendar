@@ -293,6 +293,11 @@ class WeekdayRelativeToDate(DateExpr):
         return {candidate}
 
 
+def _display_path(path: Path) -> str:
+    """Format a path as parent/name for log messages."""
+    return str(Path(path.parent.name) / path.name)
+
+
 def main(argv: list[str] | None = None) -> None:
     """Run the calendar utility."""
     setup_logging()
@@ -306,8 +311,21 @@ def cli(argv: list[str] | None = None) -> None:
     """Command-line interface for the calendar utility."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    level = logging.DEBUG if args.verbose else logging.INFO
-    logging.getLogger().setLevel(level)
+
+    if args.verbose >= 2:  # noqa: PLR2004
+        level = logging.DEBUG
+        fmt = "pylendar [%(levelname)s] %(message)s"
+    elif args.verbose == 1:
+        level = logging.INFO
+        fmt = "pylendar: %(message)s"
+    else:
+        level = logging.WARNING
+        fmt = "pylendar: %(levelname)s: %(message)s"
+
+    root = logging.getLogger()
+    root.setLevel(level)
+    if root.handlers:
+        root.handlers[0].setFormatter(logging.Formatter(fmt))
 
     utc_offset, longitude = resolve_coordinates(args.U, args.l)
 
@@ -319,7 +337,7 @@ def cli(argv: list[str] | None = None) -> None:
         Path(args.file) if args.file else find_calendar(DEFAULT_CALENDAR_PATHS)
     )
     if not calendar_path.is_file():
-        log.debug(f"Calendar file '{calendar_path}' not found, exiting...")
+        log.warning(f"Calendar file not found: {calendar_path}")
         return
 
     friday = bsd_to_python_weekday(args.F)
@@ -390,9 +408,8 @@ def process_calendar(
     directives = extract_directives(calendar_lines)
     date_parser = DateStringParser(date_exprs, directives=directives)
 
-    log.debug(f"File path = {calendar_path}")
-    log.debug(f"Today is {today}")
-    log.debug(f"Ahead = {ahead_days}, Behind = {behind_days}")
+    log.info(f"Today: {today}")
+    log.info(f"Date range: {behind_days} days back, {ahead_days} days ahead")
     log.debug(f"dates_to_check = {dates_to_check}")
     log.debug(f"date_exprs = {date_exprs}")
 
@@ -401,6 +418,7 @@ def process_calendar(
         for line in calendar_lines
         for event in get_matching_events(line, dates_to_check, date_parser)
     ]
+    log.info(f"Found {len(matching_events)} event(s) in date range")
     return [
         format_event(event, weekday=opts.weekday) for event in sorted(matching_events)
     ]
@@ -423,11 +441,13 @@ def join_continuation_lines(lines: list[str]) -> list[str]:
 
 
 def setup_logging() -> None:
-    """Set up logging configuration."""
+    """Set up logging with a WARNING-level default.
+
+    ``cli()`` reconfigures the level and formatter after parsing ``-v`` flags.
+    """
     logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+        level=logging.WARNING,
+        format="pylendar: %(levelname)s: %(message)s",
     )
 
 
@@ -505,6 +525,7 @@ class DateStringParser:
                 with calendar.different_locale(dirs.lang):  # type: ignore[arg-type]
                     self.month_map.update(self.build_month_map())
                     self.weekday_map.update(self.build_weekday_map())
+                log.info(f"Using locale: {dirs.lang}")
             except locale.Error:
                 log.warning(f"LANG={dirs.lang}: locale not available; ignoring")
 
@@ -513,6 +534,7 @@ class DateStringParser:
         if dirs.sequence:
             for word, n in zip(dirs.sequence, (1, 2, 3, 4, 5, -1), strict=True):
                 self.ordinal_map[word.casefold()] = n
+            log.info(f"Custom ordinal sequence: {dirs.sequence}")
         self.ordinals_re = "|".join(self.ordinal_map)
 
     @staticmethod
@@ -821,23 +843,21 @@ class SimpleCPP:
         """Initialize the preprocessor with include directories."""
         self.include_dirs = [Path(d) for d in include_dirs]
         self.included_files: set[Path] = set()
-        stringified_dirs = [str(d) for d in include_dirs]
-        log.debug(f"Including calendar files from directories: {stringified_dirs}")
 
     def process_file(self, path: Path) -> list[str]:
         """Process a C/C++ source file, resolving includes and removing comments."""
         abs_path = path.resolve()
         if abs_path in self.included_files:
-            log.debug(f"Skipping {abs_path.name}: already included")
+            log.info(f"Skipping (already included): {_display_path(abs_path)}")
             return []
-        log.debug(f"Processing {abs_path.name}")
+        log.info(f"Processing: {_display_path(abs_path)}")
         self.included_files.add(abs_path)
 
         lines = []
         try:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
-            log.warning("Skipping %s: not valid UTF-8", path.name)
+            log.warning(f"Skipping {path.name}: not valid UTF-8")
             return []
         for line in remove_comments(text).splitlines():
             stripped = line.strip()
@@ -897,6 +917,10 @@ class SimpleCPP:
                     if locale_dir.is_dir():
                         candidate = locale_dir / rest
                         if candidate.is_file():
+                            log.debug(
+                                f"Resolved include via locale fallback:"
+                                f" {name} -> {candidate}"
+                            )
                             return candidate.resolve()
 
         return None
@@ -1072,8 +1096,10 @@ def parse_special_dates(
             # If either side is a known date expr, add the alias
             if left in date_exprs and right not in date_exprs:
                 date_exprs[right] = date_exprs[left]
+                log.debug(f"Date alias: {left} = {right}")
             elif right in date_exprs:
                 date_exprs[left] = date_exprs[right]
+                log.debug(f"Date alias: {left} = {right}")
 
     return date_exprs
 
@@ -1385,14 +1411,13 @@ def find_calendar(look_in: Sequence[Path]) -> Path:
     """Find the calendar file in standard locations."""
     calendar_dir = os.environ.get("CALENDAR_DIR")
     first = Path(calendar_dir) if calendar_dir else Path.cwd()
-    dirs = [first, *look_in]
-    my_dir = (Path.home() / ".calendar").resolve()
-    if my_dir.is_dir():
-        dirs.insert(1, my_dir)
+    dirs = list(dict.fromkeys([first, *look_in]))
+    log.debug(f"Searching for calendar in: {[str(d) for d in dirs]}")
     for dir_path in dirs:
         file = dir_path / "calendar"
         if file.is_file():
             return file.resolve()
+    log.warning("No calendar file found in search path")
     return Path("calendar")
 
 

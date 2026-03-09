@@ -80,7 +80,9 @@ The following options are available:
 : Print version information and exit.
 
 **-v**, **--verbose**
-: Increase verbosity (can be used multiple times).
+: Increase verbosity. May be specified up to twice: **-v** shows
+  operational information (files processed, date range, event count);
+  **-vv** adds internal debugging details.
 
 **-W** *num*
 : Print lines from today and the next *num* calendar days (forward,
