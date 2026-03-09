@@ -79,3 +79,19 @@ wheel via hatchling shared-data and is not checked into git.
 When adding or changing command-line options, date format support, file search
 paths, or other user-visible behavior, update `docs/pylendar.1.md` to match.
 When bumping the version, update the `footer` field in the YAML front matter.
+
+## Releasing
+
+1. Update `footer` in `docs/pylendar.1.md` to the new version
+2. Bump `__version__` in `src/pylendar/pylendar.py`
+3. `just check` — must pass
+4. Commit with message `Version X.Y.Z`
+5. `git tag vX.Y.Z && git push && git push --tags`
+6. Create a **draft** GitHub release from the tag (`gh release create vX.Y.Z --draft`)
+   — Do not publish the release, because it would trigger CI → PyPI. A human will do this manually.
+
+### Release notes style
+
+Use a few emojis in section headings to match prior releases (e.g. 🛠️ 🐛 ✨ 🗓️ 🚀 📚).
+Draft the notes technically, then run `/humanizer` on the text before publishing
+to make it clear and friendly to a general audience.
