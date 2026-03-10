@@ -91,15 +91,6 @@ BSD_WEEKDAY_MIN = 0
 BSD_WEEKDAY_MAX = 6
 
 
-def positive_int(value: str) -> int:
-    """Argparse converter that accepts only non-negative integers."""
-    num = int(value)
-    if num < 0:
-        msg = f"value must be >= 0, got {num}"
-        raise ValueError(msg)
-    return num
-
-
 class DateExpr(ABC):  # pylint: disable=too-few-public-methods
     """A date expression that resolves to concrete dates for a given year."""
 
@@ -1192,36 +1183,49 @@ def _parse_dot_date(t_str: str) -> datetime.date:
         raise argparse.ArgumentTypeError(msg) from None
 
 
-def _parse_iso_date(t_str: str) -> datetime.date:
-    """Parse an ISO 8601 date string (YYYY-MM-DD)."""
-    try:
-        return datetime.date.fromisoformat(t_str)
-    except ValueError:
-        msg = f"Invalid ISO 8601 date: {t_str}"
-        raise argparse.ArgumentTypeError(msg) from None
+def _parse_single_date_expr_for_today(
+    t_str: str, *, today: datetime.date
+) -> datetime.date:
+    """Parse a non-legacy -t expression and require a single resolved date.
+
+    This delegates to ``DateStringParser`` so -t can share pylendar's
+    date-expression syntax. Expressions that resolve to zero or multiple
+    dates are rejected because -t must represent exactly one date.
+    """
+    date_expr = DateStringParser().parse(t_str)
+    if date_expr is None:
+        msg = f"Invalid -t date format: {t_str}"
+        raise argparse.ArgumentTypeError(msg)
+
+    resolved = date_expr.resolve(today.year)
+    if not resolved:
+        msg = f"Date does not resolve in year {today.year}: {t_str}"
+        raise argparse.ArgumentTypeError(msg)
+    if len(resolved) > 1:
+        msg = f"Ambiguous -t date format (matches multiple dates): {t_str}"
+        raise argparse.ArgumentTypeError(msg)
+    return next(iter(resolved))
 
 
 def parse_today_arg(t_str: str) -> datetime.date:
     """Parse the -t argument and return a datetime.date object.
 
     Acceptable formats:
-      - ISO 8601: YYYY-MM-DD
       - OpenBSD/Debian positional: dd, mmdd, yymmdd, ccyymmdd
       - macOS/FreeBSD dot-separated: dd.mm, dd.mm.year
+      - Any pylendar date expression that resolves to exactly one date
     """
     t_str = t_str.strip()
-    if "-" in t_str:
-        return _parse_iso_date(t_str)
+    today = datetime.date.today()
+
     if "." in t_str:
         return _parse_dot_date(t_str)
     # cSpell:ignore mmdd, ccyymmdd
     if re.fullmatch(r"\d{2}", t_str):
         # dd
-        today = datetime.date.today()
         return datetime.date(today.year, today.month, int(t_str))
     if re.fullmatch(r"\d{4}", t_str):
         # mmdd
-        today = datetime.date.today()
         return datetime.date(today.year, int(t_str[:2]), int(t_str[2:]))
     if re.fullmatch(r"\d{6}", t_str):
         # yymmdd
@@ -1241,21 +1245,8 @@ def parse_today_arg(t_str: str) -> datetime.date:
         mm = int(t_str[4:6])
         dd = int(t_str[6:])
         return datetime.date(year, mm, dd)
-    msg = f"Invalid -t date format: {t_str}"
-    raise argparse.ArgumentTypeError(msg)
 
-
-def parse_bsd_weekday(value: str) -> int:
-    """Parse BSD weekday number for -F (0=Sun .. 6=Sat)."""
-    try:
-        day = int(value)
-    except ValueError as exc:
-        msg = f"Invalid BSD weekday: {value}"
-        raise argparse.ArgumentTypeError(msg) from exc
-    if not BSD_WEEKDAY_MIN <= day <= BSD_WEEKDAY_MAX:
-        msg = f"BSD weekday out of range [0-6]: {day}"
-        raise argparse.ArgumentTypeError(msg)
-    return day
+    return _parse_single_date_expr_for_today(t_str, today=today)
 
 
 def get_dates_to_check(
@@ -1285,6 +1276,28 @@ def get_dates_to_check(
         else:
             remaining -= 1
     return dates
+
+
+def parse_bsd_weekday(value: str) -> int:
+    """Parse BSD weekday number for -F (0=Sun .. 6=Sat)."""
+    try:
+        day = int(value)
+    except ValueError as exc:
+        msg = f"Invalid BSD weekday: {value}"
+        raise argparse.ArgumentTypeError(msg) from exc
+    if not BSD_WEEKDAY_MIN <= day <= BSD_WEEKDAY_MAX:
+        msg = f"BSD weekday out of range [0-6]: {day}"
+        raise argparse.ArgumentTypeError(msg)
+    return day
+
+
+def positive_int(value: str) -> int:
+    """Argparse converter that accepts only non-negative integers."""
+    num = int(value)
+    if num < 0:
+        msg = f"value must be >= 0, got {num}"
+        raise ValueError(msg)
+    return num
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1362,8 +1375,9 @@ def build_parser() -> argparse.ArgumentParser:
         dest="today",
         # Positional format from OpenBSD/Debian; dot-separated from macOS/FreeBSD.
         help="Act like the specified value is 'today' instead of using the current "
-        "date. Accepts YYYY-MM-DD, [[[cc]yy]mm]dd (if yy is between 69 and 99, "
-        "cc defaults to 19; otherwise 20), or dd.mm[.year].",
+        "date. Accepts [[[cc]yy]mm]dd (if yy is between 69 and 99, cc defaults "
+        "to 19; otherwise 20), dd.mm[.year], or any pylendar date expression "
+        "that resolves to exactly one date.",
     )
     # NOTE: NetBSD uses -w for "extra Friday days" (different meaning).
     # We follow the OpenBSD/Debian convention.

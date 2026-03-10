@@ -68,8 +68,9 @@ The following options are available:
 : Act like the specified value is "today" instead of using the current
   date. Accepts both FreeBSD format *dd*\[.*mm*\[.*year*]] and
   OpenBSD/Debian format \[[[*cc*]*yy*]*mm*]*dd*. If *yy* is between 69
-  and 99, *cc* defaults to 19; otherwise 20. Also accepts ISO 8601
-  *YYYY-MM-DD* format.
+  and 99, *cc* defaults to 19; otherwise 20. Also accepts any
+  **pylendar** date expression that resolves to exactly one date
+  (including ISO 8601 *YYYY-MM-DD*).
 
 **-U** *utc-offset*
 : UTC offset in hours (e.g., -8 for PST, 1 for CET). If neither UTC
@@ -293,7 +294,8 @@ following differences exist:
 
 **-t accepts multiple formats**
 : Accepts both FreeBSD (*dd.mm[.year]*) and OpenBSD/Debian
-  (*[[[cc]yy]mm]dd*) formats, as well as ISO 8601.
+  (*[[[cc]yy]mm]dd*) formats, plus any single-date **pylendar** date
+  expression (including ISO 8601).
 
 **-w follows OpenBSD/Debian**
 : Prints weekday name in front of each event, following the

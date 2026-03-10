@@ -1,5 +1,6 @@
 """Tests for parse_today_arg (the -t flag) and _parse_dot_date."""
 
+import calendar
 import datetime
 
 import pytest
@@ -45,12 +46,23 @@ def test_positional_formats(arg: str, expected: datetime.date) -> None:
     [
         ("2026-03-02", datetime.date(2026, 3, 2)),
         ("1999-12-31", datetime.date(1999, 12, 31)),
+        ("May 15", datetime.date(_TODAY.year, 5, 15)),
+        ("15 May", datetime.date(_TODAY.year, 5, 15)),
     ],
-    ids=["typical", "end-of-century"],
+    ids=["typical", "end-of-century", "month-day", "day-month"],
 )
 def test_iso_formats(arg: str, expected: datetime.date) -> None:
-    """Parse ISO 8601 date format (YYYY-MM-DD)."""
+    """Parse ISO and single-date parser expressions in -t."""
     assert parse_today_arg(arg) == expected
+
+
+def test_weekday_relative_expression() -> None:
+    """Parse weekday-relative expressions via DateStringParser fallback."""
+    anchor = datetime.date(_TODAY.year, 6, 19)
+    candidate = anchor + datetime.timedelta(days=1)
+    while candidate.weekday() != calendar.SATURDAY:
+        candidate += datetime.timedelta(days=1)
+    assert parse_today_arg("Sat>Jun 19") == candidate
 
 
 # --- macOS/FreeBSD dot-separated format ---
@@ -92,8 +104,10 @@ def test_dot_formats(arg: str, expected: datetime.date) -> None:
         ("1.13.2026", r"Out-of-range"),
         ("32.1.2026", r"Out-of-range"),
         ("abc", r"Invalid"),
-        ("2026-13-01", r"Invalid ISO"),
-        ("2026-02-30", r"Invalid ISO"),
+        ("2026-13-01", r"Invalid|does not resolve"),
+        ("2026-02-30", r"Invalid|does not resolve"),
+        ("Friday", r"Ambiguous"),
+        ("* 15", r"Ambiguous"),
     ],
     ids=[
         "trailing-dot",
@@ -104,6 +118,8 @@ def test_dot_formats(arg: str, expected: datetime.date) -> None:
         "positional-invalid",
         "iso-bad-month",
         "iso-bad-day",
+        "weekday-ambiguous",
+        "wildcard-ambiguous",
     ],
 )
 def test_invalid_inputs(arg: str, match: str) -> None:
