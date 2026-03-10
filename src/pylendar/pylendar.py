@@ -83,6 +83,22 @@ _LETTER = r"[^\W\d_]"  # Unicode letter (like [a-z] but locale-aware)
 
 DateSet: TypeAlias = set[datetime.date]
 
+YY_PIVOT_START = 69
+YY_PIVOT_END = 99
+YY_CENTURY_1900 = 19
+YY_CENTURY_2000 = 20
+BSD_WEEKDAY_MIN = 0
+BSD_WEEKDAY_MAX = 6
+
+
+def positive_int(value: str) -> int:
+    """Argparse converter that accepts only non-negative integers."""
+    num = int(value)
+    if num < 0:
+        msg = f"value must be >= 0, got {num}"
+        raise ValueError(msg)
+    return num
+
 
 class DateExpr(ABC):  # pylint: disable=too-few-public-methods
     """A date expression that resolves to concrete dates for a given year."""
@@ -272,11 +288,22 @@ class EveryWeekday(DateExpr):
 class WeekdayRelativeToDate(DateExpr):
     """Weekday strictly before or after a fixed date (e.g., Sat>Jun 19)."""
 
+    _MAX_WEEKDAY: ClassVar[int] = 6
+
     month: int
     day: int
     weekday: int  # 0=Mon ... 6=Sun
     direction: int  # -1 = before (<), +1 = after (>)
     anchor_offset: int = 0  # day offset applied to anchor before search
+
+    def __post_init__(self) -> None:
+        """Validate fields so resolution cannot enter invalid states."""
+        if self.direction not in {-1, 1}:
+            msg = f"direction must be -1 or 1, got {self.direction}"
+            raise ValueError(msg)
+        if not 0 <= self.weekday <= self._MAX_WEEKDAY:
+            msg = f"weekday must be in range 0..6, got {self.weekday}"
+            raise ValueError(msg)
 
     def resolve(self, year: int) -> DateSet:
         """Return the nearest weekday before/after the anchor date."""
@@ -288,9 +315,11 @@ class WeekdayRelativeToDate(DateExpr):
             return set()
         delta = self.direction
         candidate = anchor + datetime.timedelta(days=delta)
-        while candidate.weekday() != self.weekday:
+        for _ in range(self._MAX_WEEKDAY + 1):
+            if candidate.weekday() == self.weekday:
+                return {candidate}
             candidate += datetime.timedelta(days=delta)
-        return {candidate}
+        return set()
 
 
 def _display_path(path: Path) -> str:
@@ -859,7 +888,7 @@ class SimpleCPP:
         except UnicodeDecodeError:
             log.warning(f"Skipping {path.name}: not valid UTF-8")
             return []
-        for line in remove_comments(text).splitlines():
+        for line_num, line in enumerate(remove_comments(text).splitlines(), start=1):
             stripped = line.strip()
 
             if stripped.startswith("#include"):
@@ -873,7 +902,10 @@ class SimpleCPP:
                         msg = f"Included file not found: {include_target}"
                         log.warning(msg)
                 else:
-                    msg = f"Malformed include directive: {line}"
+                    msg = (
+                        f"Malformed include directive in {_display_path(abs_path)}"
+                        f":{line_num}: {line}"
+                    )
                     raise SyntaxError(msg)
             elif stripped.startswith("#"):
                 log.debug(f"Skipping preprocessor directive: {line}")
@@ -1198,7 +1230,9 @@ def parse_today_arg(t_str: str) -> datetime.date:
         dd = int(t_str[4:])
         # Determine the century based on the year
         # If yy is between 69 and 99, assume 1900s; otherwise assume 2000s
-        cc = 19 if 69 <= yy <= 99 else 20  # noqa: PLR2004
+        cc = (
+            YY_CENTURY_1900 if YY_PIVOT_START <= yy <= YY_PIVOT_END else YY_CENTURY_2000
+        )
         year = cc * 100 + yy
         return datetime.date(year, mm, dd)
     if re.fullmatch(r"\d{8}", t_str):
@@ -1209,6 +1243,19 @@ def parse_today_arg(t_str: str) -> datetime.date:
         return datetime.date(year, mm, dd)
     msg = f"Invalid -t date format: {t_str}"
     raise argparse.ArgumentTypeError(msg)
+
+
+def parse_bsd_weekday(value: str) -> int:
+    """Parse BSD weekday number for -F (0=Sun .. 6=Sat)."""
+    try:
+        day = int(value)
+    except ValueError as exc:
+        msg = f"Invalid BSD weekday: {value}"
+        raise argparse.ArgumentTypeError(msg) from exc
+    if not BSD_WEEKDAY_MIN <= day <= BSD_WEEKDAY_MAX:
+        msg = f"BSD weekday out of range [0-6]: {day}"
+        raise argparse.ArgumentTypeError(msg)
+    return day
 
 
 def get_dates_to_check(
@@ -1253,7 +1300,7 @@ def build_parser() -> argparse.ArgumentParser:
     ahead_group = parser.add_mutually_exclusive_group()
     ahead_group.add_argument(
         "-A",
-        type=int,
+        type=positive_int,
         default=None,
         metavar="num",
         help="Print lines from today and next num business days (forward, future). "
@@ -1262,7 +1309,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ahead_group.add_argument(
         "-W",
-        type=int,
+        type=positive_int,
         default=None,
         metavar="num",
         help="Print lines from today and next num calendar days (forward, future). "
@@ -1270,7 +1317,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "-B",
-        type=int,
+        type=positive_int,
         default=0,
         metavar="num",
         help="Print lines from today and previous num days (backward, past). "
@@ -1278,7 +1325,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "-F",
-        type=int,
+        type=parse_bsd_weekday,
         default=5,
         metavar="friday",
         # Day numbering follows BSD tm_wday convention.

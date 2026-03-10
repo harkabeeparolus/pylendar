@@ -3,6 +3,7 @@
 import datetime
 import io
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -237,3 +238,63 @@ def test_cli_w_flag(tmp_path, monkeypatch):
     output = stdout.getvalue()
     assert "Jul 10\tFriday" in output
     assert "Jul 15\tWednesday" in output
+
+
+@pytest.mark.parametrize("f_value", ["0", "6"])
+def test_cli_f_flag_accepts_bsd_bounds(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    f_value: str,
+) -> None:
+    """BSD weekday range endpoints are accepted for -F."""
+    calendar_file = tmp_path / "calendar"
+    calendar_file.write_text("07/10\tFriday\n")
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["pylendar", "-F", f_value, "-f", str(calendar_file), "-t", "20260710"],
+    )
+    stdout = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", stdout)
+
+    main()
+
+    assert "Jul 10\tFriday" in stdout.getvalue()
+
+
+def test_cli_f_flag_rejects_out_of_range(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Out-of-range BSD weekday values are rejected by argparse."""
+    calendar_file = tmp_path / "calendar"
+    calendar_file.write_text("07/10\tFriday\n")
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["pylendar", "-F", "7", "-f", str(calendar_file), "-t", "20260710"],
+    )
+
+    with pytest.raises(SystemExit):
+        main()
+
+    assert "BSD weekday out of range [0-6]" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("flag", ["-A", "-W", "-B"])
+def test_cli_day_window_flags_reject_negative_values(
+    flag: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Day window flags must not accept negative values."""
+    monkeypatch.setattr(sys, "argv", ["pylendar", flag, "-1"])
+
+    with pytest.raises(SystemExit):
+        main()
+
+    err = capsys.readouterr().err
+    assert f"argument {flag}: invalid positive_int value" in err

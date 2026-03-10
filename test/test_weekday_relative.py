@@ -67,6 +67,18 @@ def test_resolve_invalid_anchor_date() -> None:
     assert expr.resolve(2026) == set()
 
 
+def test_reject_invalid_direction() -> None:
+    """Direction must be strict: before (-1) or after (+1)."""
+    with pytest.raises(ValueError, match="direction must be -1 or 1"):
+        WeekdayRelativeToDate(month=6, day=19, weekday=5, direction=0)
+
+
+def test_reject_invalid_weekday() -> None:
+    """Weekday must use Python weekday numbering (0..6)."""
+    with pytest.raises(ValueError, match=r"weekday must be in range 0\.\.6"):
+        WeekdayRelativeToDate(month=6, day=19, weekday=7, direction=1)
+
+
 def test_resolve_is_variable() -> None:
     """WeekdayRelativeToDate should be marked as variable (changes yearly)."""
     expr = WeekdayRelativeToDate(month=6, day=19, weekday=5, direction=1)

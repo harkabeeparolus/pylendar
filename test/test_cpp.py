@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from pylendar.pylendar import SimpleCPP
+from pylendar.pylendar import SimpleCPP, join_continuation_lines, remove_comments
 
 
 def test_simplecpp_can_resolve_includes(tmp_path):
@@ -129,5 +129,39 @@ def test_malformed_include_raises(tmp_path: Path) -> None:
     cal = tmp_path / "calendar"
     cal.write_text("#include\n")
     cpp = SimpleCPP(include_dirs=[tmp_path])
-    with pytest.raises(SyntaxError, match="Malformed include"):
+    with pytest.raises(
+        SyntaxError,
+        match=r"Malformed include directive in .*:1: #include",
+    ):
         cpp.process_file(cal)
+
+
+# --- helper functions ---
+
+
+def test_remove_comments_removes_block_and_line_comments() -> None:
+    """Block and // comments are removed from input text."""
+    text = "01/01\tEvent /* inline */ keep\n07/04\tOther // trailing\n"
+    result = remove_comments(text)
+    assert result == "01/01\tEvent  keep\n07/04\tOther\n"
+
+
+def test_remove_comments_keeps_url_text() -> None:
+    """http:// remains intact when // is not preceded by whitespace."""
+    text = "07/04\thttp://example.com/page\n"
+    result = remove_comments(text)
+    assert result == text
+
+
+def test_join_continuation_lines_joins_tab_prefixed_lines() -> None:
+    """Tab-prefixed continuation lines are attached to prior event lines."""
+    lines = ["07/04\tEvent", "\tcontinued", "08/01\tOther"]
+    result = join_continuation_lines(lines)
+    assert result == ["07/04\tEvent\n\tcontinued", "08/01\tOther"]
+
+
+def test_join_continuation_lines_keeps_orphan_tab_line() -> None:
+    """A leading tab line is preserved if there is no prior line to continue."""
+    lines = ["\torphan", "07/04\tEvent"]
+    result = join_continuation_lines(lines)
+    assert result == ["\torphan", "07/04\tEvent"]

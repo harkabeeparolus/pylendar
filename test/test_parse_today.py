@@ -17,10 +17,20 @@ _TODAY = datetime.date.today()
         ("15", datetime.date(_TODAY.year, _TODAY.month, 15)),
         ("0704", datetime.date(_TODAY.year, 7, 4)),
         ("260704", datetime.date(2026, 7, 4)),
+        ("680101", datetime.date(2068, 1, 1)),
+        ("690101", datetime.date(1969, 1, 1)),
         ("991231", datetime.date(1999, 12, 31)),
         ("20260216", datetime.date(2026, 2, 16)),
     ],
-    ids=["dd", "mmdd", "yymmdd-21c", "yymmdd-20c", "ccyymmdd"],
+    ids=[
+        "dd",
+        "mmdd",
+        "yymmdd-21c",
+        "yymmdd-pivot-to-21c",
+        "yymmdd-pivot-to-20c",
+        "yymmdd-20c",
+        "ccyymmdd",
+    ],
 )
 def test_positional_formats(arg: str, expected: datetime.date) -> None:
     """Parse positional date formats (DD, MMDD, YYMMDD, CCYYMMDD)."""
