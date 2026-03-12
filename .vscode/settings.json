@@ -12,5 +12,8 @@
         "newmoon",
         "pylendar",
         "sepequinox"
-    ]
+    ],
+    "chat.tools.terminal.autoApprove": {
+        "just": true
+    }
 }

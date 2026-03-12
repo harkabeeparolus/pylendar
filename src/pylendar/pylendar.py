@@ -360,7 +360,7 @@ def cli(argv: list[str] | None = None) -> None:
         log.warning(f"Calendar file not found: {calendar_path}")
         return
 
-    friday = bsd_to_python_weekday(args.F)
+    friday = (args.F - 1) % 7  # convert BSD weekday number (Sun=0) to Python (Mon=0)
     ahead_value = args.W if args.W is not None else args.A
     opts = CalendarOptions(
         ahead=ahead_value,
@@ -414,13 +414,12 @@ def process_calendar(
     processor = SimpleCPP(include_dirs=opts.include_dirs)
     calendar_lines = join_continuation_lines(processor.process_file(calendar_path))
 
-    ahead_days, behind_days = get_ahead_behind(
-        today, ahead=opts.ahead, behind=opts.behind, friday=opts.friday
-    )
+    default_look_ahead = 3 if today.weekday() == opts.friday else 1
+    ahead_days = opts.ahead if opts.ahead is not None else default_look_ahead
     dates_to_check = get_dates_to_check(
-        today,
-        ahead_days,
-        behind_days,
+        today=today,
+        ahead=ahead_days,
+        behind=opts.behind,
         friday=opts.friday,
         expand_weekends=opts.expand_weekends,
     )
@@ -429,7 +428,7 @@ def process_calendar(
     date_parser = DateStringParser(date_exprs, directives=directives)
 
     log.info(f"Today: {today}")
-    log.info(f"Date range: {behind_days} days back, {ahead_days} days ahead")
+    log.info(f"Date range: {opts.behind} days back, {ahead_days} days ahead")
     log.debug(f"dates_to_check = {dates_to_check}")
     log.debug(f"date_exprs = {date_exprs}")
 
@@ -559,10 +558,7 @@ class DateStringParser:
 
     @staticmethod
     def build_month_map() -> dict[str, int]:
-        """Build a map of month names and abbreviations to their respective numbers.
-
-        This uses the current locale at the time of execution.
-        """
+        """Build month-name and month-abbreviation map for current locale."""
         return {
             m.casefold(): n
             for s in (calendar.month_name, calendar.month_abbr)
@@ -572,10 +568,7 @@ class DateStringParser:
 
     @staticmethod
     def build_weekday_map() -> dict[str, int]:
-        """Build a map of weekday names and abbreviations to their numbers (Monday=0).
-
-        This uses the current locale at the time of execution.
-        """
+        """Build weekday-name and abbreviation map (Monday=0)."""
         return {
             d.casefold(): n
             for s in (calendar.day_name, calendar.day_abbr)
@@ -633,16 +626,16 @@ class DateStringParser:
             match = re.fullmatch(rf"({ltr}+)/({ltr}+)({ordinals})([+-]\d+)?", date_str)
             if not match:
                 return None
-            month_name = match.group(1)
-            if month_name not in self.month_map:
+            month = self.month_map.get(match.group(1))
+            if month is None:
                 return None
-            month = self.month_map[month_name]
             wkday_name = match.group(2)
 
-        if wkday_name not in self.weekday_map:
+        weekday = self.weekday_map.get(wkday_name)
+        if weekday is None:
             return None
         n = self.ordinal_map[match.group(3)]
-        base: DateExpr = NthWeekdayOfMonth(month, self.weekday_map[wkday_name], n)
+        base: DateExpr = NthWeekdayOfMonth(month, weekday, n)
         if match.group(4):
             base = OffsetDateExpr(base, int(match.group(4)))
         return base
@@ -650,16 +643,14 @@ class DateStringParser:
     @staticmethod
     def _parse_mm_dd(date_str: str) -> DateExpr | None:
         """Parse MM/DD format (e.g., 07/09)."""
-        match = re.fullmatch(r"(\d{1,2})/(\d{1,2})", date_str)
-        if match:
+        if match := re.fullmatch(r"(\d{1,2})/(\d{1,2})", date_str):
             return FixedDate(int(match.group(1)), int(match.group(2)))
         return None
 
     @staticmethod
     def _parse_full_date(date_str: str) -> DateExpr | None:
         """Parse YYYY/M/D or YYYY-MM-DD format (e.g., 2026/2/17, 2026-02-17)."""
-        match = re.fullmatch(r"(\d{4})[/-](\d{1,2})[/-](\d{1,2})", date_str)
-        if match:
+        if match := re.fullmatch(r"(\d{4})[/-](\d{1,2})[/-](\d{1,2})", date_str):
             return FixedDate(
                 month=int(match.group(2)),
                 day=int(match.group(3)),
@@ -669,8 +660,7 @@ class DateStringParser:
 
     def _parse_month_slash_dd(self, date_str: str) -> DateExpr | None:
         """Parse Month/DD format (e.g., apr/01, dec/07, jan/06)."""
-        match = re.fullmatch(rf"({_LETTER}+)/(\d{{1,2}})", date_str)
-        if match:
+        if match := re.fullmatch(rf"({_LETTER}+)/(\d{{1,2}})", date_str):
             month_name = match.group(1)
             if month_name in self.month_map:
                 return FixedDate(self.month_map[month_name], int(match.group(2)))
@@ -679,102 +669,99 @@ class DateStringParser:
     def _parse_mm_wkday_offset(self, date_str: str) -> DateExpr | None:
         """Parse MM/Weekday+/-N format (e.g., 03/Sun-1, 11/Wed+3, 12/Sun+1)."""
         match = re.fullmatch(rf"(\d{{1,2}})/({_LETTER}+)([+-])(\d+)", date_str)
-        if match:
-            month = int(match.group(1))
-            wkday_name = match.group(2)
-            if wkday_name in self.weekday_map:
-                n = _parse_signed_int(match, 3, 4)
-                return NthWeekdayOfMonth(month, self.weekday_map[wkday_name], n)
-        return None
+        if not match:
+            return None
+        weekday = self.weekday_map.get(match.group(2))
+        if weekday is None:
+            return None
+        n = _parse_signed_int(match, 3, 4)
+        return NthWeekdayOfMonth(int(match.group(1)), weekday, n)
 
     def _parse_month_wkday_offset(self, date_str: str) -> DateExpr | None:
         """Parse Month Weekday+/-N format (e.g., May Sun+2, Nov Thu+4, May Mon-1)."""
         match = re.fullmatch(rf"({_LETTER}+)\s+({_LETTER}+)([+-])(\d+)", date_str)
-        if match:
-            month_name, wkday_name = match.group(1), match.group(2)
-            n = _parse_signed_int(match, 3, 4)
-            if month_name in self.month_map and wkday_name in self.weekday_map:
-                return NthWeekdayOfMonth(
-                    self.month_map[month_name],
-                    self.weekday_map[wkday_name],
-                    n,
-                )
-        return None
+        if not match:
+            return None
+        month = self.month_map.get(match.group(1))
+        if month is None:
+            return None
+        weekday = self.weekday_map.get(match.group(2))
+        if weekday is None:
+            return None
+        return NthWeekdayOfMonth(month, weekday, _parse_signed_int(match, 3, 4))
 
     def _parse_month_dd(self, date_str: str) -> DateExpr | None:
         """Parse Month DD format (e.g., July 9, Jul 9)."""
         match = re.fullmatch(rf"({_LETTER}+)\s+(\d{{1,2}})", date_str)
-        if match:
-            month_name = match.group(1)
-            if month_name in self.month_map:
-                return FixedDate(self.month_map[month_name], int(match.group(2)))
-        return None
+        if not match:
+            return None
+        month = self.month_map.get(match.group(1))
+        if month is None:
+            return None
+        return FixedDate(month, int(match.group(2)))
 
     def _parse_wildcard_wkday(self, date_str: str) -> DateExpr | None:
         """Parse * Weekday+/-N format (e.g., * Fri+3)."""
-        match = re.fullmatch(rf"\*\s+({_LETTER}+)([+-])(\d+)", date_str)
-        if match:
-            wkday_name = match.group(1)
+        if match := re.fullmatch(rf"\*\s+({_LETTER}+)([+-])(\d+)", date_str):
             n = _parse_signed_int(match, 2, 3)
-            if wkday_name in self.weekday_map:
-                return NthWeekdayEveryMonth(self.weekday_map[wkday_name], n)
+            weekday = self.weekday_map.get(match.group(1))
+            if weekday is not None:
+                return NthWeekdayEveryMonth(weekday, n)
         return None
 
     @staticmethod
     def _parse_wildcard_day(date_str: str) -> DateExpr | None:
-        """Parse * DD or *DD format (e.g., * 9, *15)."""
-        match = re.fullmatch(r"\*\s*(\d{1,2})", date_str)
-        if match:
+        """Parse wildcard-day format '* DD' (e.g., * 9, *15)."""
+        if match := re.fullmatch(r"\*\s*(\d{1,2})", date_str):
+            return WildcardDay(int(match.group(1)))
+        return None
+
+    @staticmethod
+    def _parse_wildcard_day_reversed(date_str: str) -> DateExpr | None:
+        """Parse wildcard-day format 'DD *' (e.g., 15 *)."""
+        if match := re.fullmatch(r"(\d{1,2})\s+\*", date_str):
             return WildcardDay(int(match.group(1)))
         return None
 
     @staticmethod
     def _parse_every_day(date_str: str) -> DateExpr | None:
         """Parse ** or * * format (every day of the year)."""
-        if re.fullmatch(r"\*\s*\*", date_str):
-            return EveryDay()
-        return None
+        return EveryDay() if re.fullmatch(r"\*\s*\*", date_str) else None
 
     def _parse_month_wildcard(self, date_str: str) -> DateExpr | None:
         """Parse Month* or Month * format (every day of that month, e.g., June*)."""
         match = re.fullmatch(rf"({_LETTER}+)\s*\*", date_str)
-        if match:
-            month_name = match.group(1)
-            if month_name in self.month_map:
-                return EveryDayOfMonth(self.month_map[month_name])
-        return None
-
-    def _parse_wildcard_day_reversed(self, date_str: str) -> DateExpr | None:
-        """Parse DD * format (e.g., 15 * for 15th of every month)."""
-        match = re.fullmatch(r"(\d{1,2})\s+\*", date_str)
-        if match:
-            return WildcardDay(int(match.group(1)))
-        return None
+        if not match:
+            return None
+        month = self.month_map.get(match.group(1))
+        if month is None:
+            return None
+        return EveryDayOfMonth(month)
 
     def _parse_wkday_ord_month(self, date_str: str) -> DateExpr | None:
         """Parse WkdayOrd Month format (e.g., SunFirst Aug, SunThird Jul)."""
         ordinals = self.ordinals_re
         match = re.fullmatch(rf"({_LETTER}+)({ordinals})\s+({_LETTER}+)", date_str)
-        if match:
-            wkday_name = match.group(1)
-            month_name = match.group(3)
-            if wkday_name in self.weekday_map and month_name in self.month_map:
-                n = self.ordinal_map[match.group(2)]
-                return NthWeekdayOfMonth(
-                    self.month_map[month_name],
-                    self.weekday_map[wkday_name],
-                    n,
-                )
-        return None
+        if not match:
+            return None
+        month = self.month_map.get(match.group(3))
+        if month is None:
+            return None
+        weekday = self.weekday_map.get(match.group(1))
+        if weekday is None:
+            return None
+        n = self.ordinal_map[match.group(2)]
+        return NthWeekdayOfMonth(month, weekday, n)
 
     def _parse_dd_month(self, date_str: str) -> DateExpr | None:
         """Parse DD Month format (e.g., 01 Jan, 21 Apr)."""
         match = re.fullmatch(rf"(\d{{1,2}})\s+({_LETTER}+)", date_str)
-        if match:
-            month_name = match.group(2)
-            if month_name in self.month_map:
-                return FixedDate(self.month_map[month_name], int(match.group(1)))
-        return None
+        if not match:
+            return None
+        month = self.month_map.get(match.group(2))
+        if month is None:
+            return None
+        return FixedDate(month, int(match.group(1)))
 
     _WKDAY_REL_RE: ClassVar[re.Pattern[str]] = re.compile(
         rf"(?P<wkday>{_LETTER}+)\s*(?P<dir>[<>])\s*(?P<anchor>.+)"
@@ -788,10 +775,9 @@ class DateStringParser:
         if not match:
             return None
 
-        wkday_name = match.group("wkday")
-        if wkday_name not in self.weekday_map:
+        weekday = self.weekday_map.get(match.group("wkday"))
+        if weekday is None:
             return None
-        weekday = self.weekday_map[wkday_name]
         direction = 1 if match.group("dir") == ">" else -1
 
         anchor_str = match.group("anchor").strip()
@@ -839,8 +825,8 @@ class DateStringParser:
             or self._parse_every_day(date_str)
             or self._parse_wildcard_wkday(date_str)
             or self._parse_wildcard_day(date_str)
-            or self._parse_wkday_ord_month(date_str)
             or self._parse_wildcard_day_reversed(date_str)
+            or self._parse_wkday_ord_month(date_str)
             or self._parse_dd_month(date_str)
         )
 
@@ -964,9 +950,7 @@ def resolve_coordinates(
 ) -> tuple[float, float]:
     """Derive UTC offset and east longitude from -U and -l flags.
 
-    Returns:
-        (utc_offset_hours, east_longitude)
-
+    Returns ``(utc_offset_hours, east_longitude)``.
     """
     if utc_offset_flag is not None:
         longitude = (
@@ -980,12 +964,7 @@ def resolve_coordinates(
 
 
 def get_seasons(year: int, utc_offset_hours: float = 0) -> dict[str, datetime.date]:
-    """Get the dates of equinoxes and solstices for a given year.
-
-    Returns:
-        dict mapping season names to their dates
-
-    """
+    """Return a dict mapping season keyword names to their dates for the given year."""
     return {
         name: dt.date() for name, dt in _get_season_datetimes(year, utc_offset_hours)
     }
@@ -1012,11 +991,9 @@ def _search_moon_phases(
 
 
 def get_moon_phases(year: int, utc_offset_hours: float = 0) -> dict[str, DateSet]:
-    """Get all new and full moon dates for a given year.
+    """Return new and full moon dates for the year.
 
-    Returns:
-        dict mapping "newmoon" and "fullmoon" to sets of dates
-
+    Keys are ``"newmoon"`` and ``"fullmoon"``; values are sets of dates.
     """
     return {
         name: {dt.date() for dt in _search_moon_phases(year, angle, utc_offset_hours)}
@@ -1058,18 +1035,12 @@ def print_diagnostic(mode: str, year: int, utc_offset: float, longitude: float) 
     print(f"UTCOffset: {_format_frac(utc_offset)}")
     print(f"eastlongitude: {_format_frac(longitude)}")
 
-    _diag_labels = {
-        "marequinox": "e[0]",
-        "sepequinox": "e[1]",
-        "junsolstice": "s[0]",
-        "decsolstice": "s[1]",
-    }
     if mode == "sun":
         print(f"Sun in {year}:")
         for name, dt in _get_season_datetimes(year, utc_offset):
             frac = _fractional_day_of_year(dt)
             ts = dt.strftime("%m-%d %H:%M:%S")
-            print(f"{_diag_labels[name]} - {_format_frac(frac)} ({ts})")
+            print(f"{_DIAG_LABELS[name]} - {_format_frac(frac)} ({ts})")
     else:
         for label, angle in [("Full moon", 180), ("New moon", 0)]:
             dts = _search_moon_phases(year, angle, utc_offset)
@@ -1085,9 +1056,7 @@ def parse_special_dates(
 ) -> dict[str, DateExpr]:
     """Parse special date definitions and aliases from the calendar file.
 
-    Returns:
-        dict mapping date keywords to DateExpr objects
-
+    Returns a dict mapping date keywords to DateExpr objects.
     """
     date_exprs: dict[str, DateExpr] = {}
 
@@ -1128,6 +1097,13 @@ def parse_special_dates(
 
 
 _LANG_NOOP = frozenset({"c", "posix", "utf-8", "utf8"})
+
+_DIAG_LABELS: dict[str, str] = {
+    "marequinox": "e[0]",
+    "sepequinox": "e[1]",
+    "junsolstice": "s[0]",
+    "decsolstice": "s[1]",
+}
 
 
 def extract_directives(calendar_lines: list[str]) -> CalendarDirectives:
@@ -1220,31 +1196,25 @@ def parse_today_arg(t_str: str) -> datetime.date:
 
     if "." in t_str:
         return _parse_dot_date(t_str)
-    # cSpell:ignore mmdd, ccyymmdd
-    if re.fullmatch(r"\d{2}", t_str):
-        # dd
-        return datetime.date(today.year, today.month, int(t_str))
-    if re.fullmatch(r"\d{4}", t_str):
-        # mmdd
-        return datetime.date(today.year, int(t_str[:2]), int(t_str[2:]))
-    if re.fullmatch(r"\d{6}", t_str):
-        # yymmdd
-        yy = int(t_str[:2])
-        mm = int(t_str[2:4])
-        dd = int(t_str[4:])
-        # Determine the century based on the year
-        # If yy is between 69 and 99, assume 1900s; otherwise assume 2000s
-        cc = (
-            YY_CENTURY_1900 if YY_PIVOT_START <= yy <= YY_PIVOT_END else YY_CENTURY_2000
-        )
-        year = cc * 100 + yy
-        return datetime.date(year, mm, dd)
-    if re.fullmatch(r"\d{8}", t_str):
-        # ccyymmdd
-        year = int(t_str[:4])
-        mm = int(t_str[4:6])
-        dd = int(t_str[6:])
-        return datetime.date(year, mm, dd)
+    if t_str.isdigit():
+        if len(t_str) == 2:  # noqa: PLR2004
+            return datetime.date(today.year, today.month, int(t_str))
+        if len(t_str) == 4:  # noqa: PLR2004
+            return datetime.date(today.year, int(t_str[:2]), int(t_str[2:]))
+        if len(t_str) == 6:  # noqa: PLR2004
+            # yymmdd — two-digit year with century pivot
+            yy = int(t_str[:2])
+            mm = int(t_str[2:4])
+            dd = int(t_str[4:])
+            century = (
+                YY_CENTURY_1900
+                if YY_PIVOT_START <= yy <= YY_PIVOT_END
+                else YY_CENTURY_2000
+            )
+            year = century * 100 + yy
+            return datetime.date(year, mm, dd)
+        if len(t_str) == 8:  # noqa: PLR2004
+            return datetime.date(int(t_str[:4]), int(t_str[4:6]), int(t_str[6:]))
 
     return _parse_single_date_expr_for_today(t_str, today=today)
 
@@ -1401,24 +1371,6 @@ def build_parser() -> argparse.ArgumentParser:
         version=f"%(prog)s {__version__}",
     )
     return parser
-
-
-def bsd_to_python_weekday(bsd_wday: int) -> int:
-    """Convert BSD tm_wday (0=Sun..6=Sat) to Python weekday (0=Mon..6=Sun)."""
-    return (bsd_wday - 1) % 7
-
-
-def get_ahead_behind(
-    today: datetime.date,
-    ahead: int | None = None,
-    behind: int = 0,
-    *,
-    friday: int = 4,
-) -> tuple[int, int]:
-    """Determine the number of days to look ahead and behind."""
-    weekday = today.weekday()
-    ahead_days = ahead if ahead is not None else 3 if weekday == friday else 1
-    return ahead_days, behind
 
 
 def replace_age_in_description(description: str, check_date: datetime.date) -> str:
