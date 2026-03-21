@@ -79,6 +79,7 @@ ORDINAL_MAP: dict[str, int] = {
     "last": -1,
 }
 _LETTER = r"[^\W\d_]"  # Unicode letter (like [a-z] but locale-aware)
+_NN = r"\d{1,2}"  # 1-or-2-digit number (month or day)
 
 DateSet: TypeAlias = set[datetime.date]
 
@@ -594,15 +595,12 @@ class DateStringParser:
 
     def _parse_ordinal_weekday(self, date_str: str) -> DateExpr | None:
         """Parse BSD ordinal weekday formats (e.g., 10/MonSecond, Oct/SatFourth-2)."""
-        ordinals = self.ordinals_re
-        ltr = _LETTER
+        ltr, ords = _LETTER, self.ordinals_re
 
-        # MM/WkdayOrdinal with optional offset (e.g., 10/monsecond, 01/monthird)
-        mm_pat = rf"(\d{{1,2}})/({ltr}+)({ordinals})([+-]\d+)?"
-        month_pat = rf"({ltr}+)/({ltr}+)({ordinals})([+-]\d+)?"
-        if match := re.fullmatch(mm_pat, date_str):
+        if match := re.fullmatch(rf"({_NN})/({ltr}+)({ords})([+-]\d+)?", date_str):
+            # MM/WkdayOrdinal with optional offset (e.g., 10/monsecond, 01/monthird)
             month = int(match.group(1))
-        elif match := re.fullmatch(month_pat, date_str):
+        elif match := re.fullmatch(rf"({ltr}+)/({ltr}+)({ords})([+-]\d+)?", date_str):
             # Month/WkdayOrdinal with optional offset (e.g., oct/satfourth-2)
             if (month_name := match.group(1)) not in self.month_map:
                 return None
@@ -631,7 +629,7 @@ class DateStringParser:
 
     def _parse_slash_dd(self, date_str: str) -> DateExpr | None:
         """Parse MM/DD or Month/DD format (e.g., 07/21, apr/17)."""
-        if match := re.fullmatch(rf"(\d{{1,2}}|{_LETTER}+)/(\d{{1,2}})", date_str):
+        if match := re.fullmatch(rf"({_NN}|{_LETTER}+)/({_NN})", date_str):
             g1 = match.group(1)
             month = int(g1) if g1.isdigit() else self.month_map.get(g1)
             if month is not None:
@@ -640,7 +638,7 @@ class DateStringParser:
 
     def _parse_mm_wkday_offset(self, date_str: str) -> DateExpr | None:
         """Parse MM/Weekday+/-N format (e.g., 03/Sun-1, 11/Wed+3, 12/Sun+1)."""
-        if match := re.fullmatch(rf"(\d{{1,2}})/({_LETTER}+)([+-])(\d+)", date_str):
+        if match := re.fullmatch(rf"({_NN})/({_LETTER}+)([+-])(\d+)", date_str):
             month = int(match.group(1))
             wkday_name = match.group(2)
             if wkday_name in self.weekday_map:
@@ -663,9 +661,9 @@ class DateStringParser:
 
     def _parse_month_day(self, date_str: str) -> DateExpr | None:
         """Parse Month DD or DD Month format (e.g., July 9, 01 Jan)."""
-        if match := re.fullmatch(rf"({_LETTER}+)\s+(\d{{1,2}})", date_str):
+        if match := re.fullmatch(rf"({_LETTER}+)\s+({_NN})", date_str):
             month_name, day = match.group(1), int(match.group(2))
-        elif match := re.fullmatch(rf"(\d{{1,2}})\s+({_LETTER}+)", date_str):
+        elif match := re.fullmatch(rf"({_NN})\s+({_LETTER}+)", date_str):
             month_name, day = match.group(2), int(match.group(1))
         else:
             return None
