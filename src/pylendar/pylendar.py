@@ -257,14 +257,9 @@ class EveryWeekday(DateExpr):
     def resolve(self, year: int) -> DateSet:
         """Return all occurrences of this weekday in the given year."""
         jan1 = datetime.date(year, 1, 1)
-        days_ahead = (self.weekday - jan1.weekday()) % 7
-        first = jan1 + datetime.timedelta(days=days_ahead)
-        dates: DateSet = set()
-        current = first
-        while current.year == year:
-            dates.add(current)
-            current += datetime.timedelta(weeks=1)
-        return dates
+        first = jan1 + datetime.timedelta(days=(self.weekday - jan1.weekday()) % 7)
+        week = datetime.timedelta(weeks=1)
+        return {day for w in range(53) if (day := first + week * w).year == year}
 
 
 @dataclass(frozen=True)
@@ -404,10 +399,7 @@ def process_calendar(
     today: datetime.date,
     options: CalendarOptions | None = None,
 ) -> list[str]:
-    """Process a calendar file and return formatted event strings.
-
-    This is the core pipeline shared by ``cli()`` and test fixtures.
-    """
+    """Process a calendar file and return formatted event strings."""
     opts = options or CalendarOptions()
     processor = SimpleCPP(include_dirs=opts.include_dirs)
     calendar_lines = join_continuation_lines(processor.process_file(calendar_path))
@@ -448,11 +440,7 @@ def process_calendar(
 
 
 def join_continuation_lines(lines: list[str]) -> list[str]:
-    """Join continuation lines with their parent line.
-
-    BSD calendar files allow multi-line events where continuation lines
-    start with a tab character (no date before the tab).
-    """
+    """Join tab-indented continuation lines with their parent line."""
     result: list[str] = []
     for line in lines:
         if line.startswith("\t") and result:
@@ -552,10 +540,7 @@ class DateStringParser:
 
     @staticmethod
     def build_month_map() -> dict[str, int]:
-        """Build a map of month names and abbreviations to their respective numbers.
-
-        This uses the current locale at the time of execution.
-        """
+        """Build a locale-aware map of month names/abbreviations to numbers."""
         return {
             m.casefold(): n
             for s in (calendar.month_name, calendar.month_abbr)
@@ -565,10 +550,7 @@ class DateStringParser:
 
     @staticmethod
     def build_weekday_map() -> dict[str, int]:
-        """Build a map of weekday names and abbreviations to their numbers (Monday=0).
-
-        This uses the current locale at the time of execution.
-        """
+        """Build a locale-aware map of weekday names/abbreviations to numbers."""
         return {
             d.casefold(): n
             for s in (calendar.day_name, calendar.day_abbr)
@@ -585,8 +567,7 @@ class DateStringParser:
 
         # Special date with offset (e.g., Easter-2, FullMoon+1)
         # Must precede plain special-date lookup
-        match = re.fullmatch(rf"({_LETTER}+)([+-])(\d+)", date_str)
-        if match:
+        if match := re.fullmatch(rf"({_LETTER}+)([+-])(\d+)", date_str):
             offset = _parse_signed_int(match, 2, 3)
             if base := self.date_exprs.get(match.group(1)):
                 return OffsetDateExpr(base, offset)
@@ -617,22 +598,19 @@ class DateStringParser:
         ltr = _LETTER
 
         # MM/WkdayOrdinal with optional offset (e.g., 10/monsecond, 01/monthird)
-        match = re.fullmatch(rf"(\d{{1,2}})/({ltr}+)({ordinals})([+-]\d+)?", date_str)
-        if match:
+        mm_pat = rf"(\d{{1,2}})/({ltr}+)({ordinals})([+-]\d+)?"
+        month_pat = rf"({ltr}+)/({ltr}+)({ordinals})([+-]\d+)?"
+        if match := re.fullmatch(mm_pat, date_str):
             month = int(match.group(1))
-            wkday_name = match.group(2)
-        else:
+        elif match := re.fullmatch(month_pat, date_str):
             # Month/WkdayOrdinal with optional offset (e.g., oct/satfourth-2)
-            match = re.fullmatch(rf"({ltr}+)/({ltr}+)({ordinals})([+-]\d+)?", date_str)
-            if not match:
-                return None
-            month_name = match.group(1)
-            if month_name not in self.month_map:
+            if (month_name := match.group(1)) not in self.month_map:
                 return None
             month = self.month_map[month_name]
-            wkday_name = match.group(2)
+        else:
+            return None
 
-        if wkday_name not in self.weekday_map:
+        if (wkday_name := match.group(2)) not in self.weekday_map:
             return None
         n = self.ordinal_map[match.group(3)]
         base: DateExpr = NthWeekdayOfMonth(month, self.weekday_map[wkday_name], n)
@@ -641,18 +619,9 @@ class DateStringParser:
         return base
 
     @staticmethod
-    def _parse_mm_dd(date_str: str) -> DateExpr | None:
-        """Parse MM/DD format (e.g., 07/09)."""
-        match = re.fullmatch(r"(\d{1,2})/(\d{1,2})", date_str)
-        if match:
-            return FixedDate(int(match.group(1)), int(match.group(2)))
-        return None
-
-    @staticmethod
     def _parse_full_date(date_str: str) -> DateExpr | None:
         """Parse YYYY/M/D or YYYY-MM-DD format (e.g., 2026/2/17, 2026-02-17)."""
-        match = re.fullmatch(r"(\d{4})[/-](\d{1,2})[/-](\d{1,2})", date_str)
-        if match:
+        if match := re.fullmatch(r"(\d{4})[/-](\d{1,2})[/-](\d{1,2})", date_str):
             return FixedDate(
                 month=int(match.group(2)),
                 day=int(match.group(3)),
@@ -660,19 +629,18 @@ class DateStringParser:
             )
         return None
 
-    def _parse_month_slash_dd(self, date_str: str) -> DateExpr | None:
-        """Parse Month/DD format (e.g., apr/01, dec/07, jan/06)."""
-        match = re.fullmatch(rf"({_LETTER}+)/(\d{{1,2}})", date_str)
-        if match:
-            month_name = match.group(1)
-            if month_name in self.month_map:
-                return FixedDate(self.month_map[month_name], int(match.group(2)))
+    def _parse_slash_dd(self, date_str: str) -> DateExpr | None:
+        """Parse MM/DD or Month/DD format (e.g., 07/21, apr/17)."""
+        if match := re.fullmatch(rf"(\d{{1,2}}|{_LETTER}+)/(\d{{1,2}})", date_str):
+            g1 = match.group(1)
+            month = int(g1) if g1.isdigit() else self.month_map.get(g1)
+            if month is not None:
+                return FixedDate(month, int(match.group(2)))
         return None
 
     def _parse_mm_wkday_offset(self, date_str: str) -> DateExpr | None:
         """Parse MM/Weekday+/-N format (e.g., 03/Sun-1, 11/Wed+3, 12/Sun+1)."""
-        match = re.fullmatch(rf"(\d{{1,2}})/({_LETTER}+)([+-])(\d+)", date_str)
-        if match:
+        if match := re.fullmatch(rf"(\d{{1,2}})/({_LETTER}+)([+-])(\d+)", date_str):
             month = int(match.group(1))
             wkday_name = match.group(2)
             if wkday_name in self.weekday_map:
@@ -682,8 +650,7 @@ class DateStringParser:
 
     def _parse_month_wkday_offset(self, date_str: str) -> DateExpr | None:
         """Parse Month Weekday+/-N format (e.g., May Sun+2, Nov Thu+4, May Mon-1)."""
-        match = re.fullmatch(rf"({_LETTER}+)\s+({_LETTER}+)([+-])(\d+)", date_str)
-        if match:
+        if match := re.fullmatch(rf"({_LETTER}+)\s+({_LETTER}+)([+-])(\d+)", date_str):
             month_name, wkday_name = match.group(1), match.group(2)
             n = _parse_signed_int(match, 3, 4)
             if month_name in self.month_map and wkday_name in self.weekday_map:
@@ -694,19 +661,21 @@ class DateStringParser:
                 )
         return None
 
-    def _parse_month_dd(self, date_str: str) -> DateExpr | None:
-        """Parse Month DD format (e.g., July 9, Jul 9)."""
-        match = re.fullmatch(rf"({_LETTER}+)\s+(\d{{1,2}})", date_str)
-        if match:
-            month_name = match.group(1)
-            if month_name in self.month_map:
-                return FixedDate(self.month_map[month_name], int(match.group(2)))
+    def _parse_month_day(self, date_str: str) -> DateExpr | None:
+        """Parse Month DD or DD Month format (e.g., July 9, 01 Jan)."""
+        if match := re.fullmatch(rf"({_LETTER}+)\s+(\d{{1,2}})", date_str):
+            month_name, day = match.group(1), int(match.group(2))
+        elif match := re.fullmatch(rf"(\d{{1,2}})\s+({_LETTER}+)", date_str):
+            month_name, day = match.group(2), int(match.group(1))
+        else:
+            return None
+        if month_name in self.month_map:
+            return FixedDate(self.month_map[month_name], day)
         return None
 
     def _parse_wildcard_wkday(self, date_str: str) -> DateExpr | None:
         """Parse * Weekday+/-N format (e.g., * Fri+3)."""
-        match = re.fullmatch(rf"\*\s+({_LETTER}+)([+-])(\d+)", date_str)
-        if match:
+        if match := re.fullmatch(rf"\*\s+({_LETTER}+)([+-])(\d+)", date_str):
             wkday_name = match.group(1)
             n = _parse_signed_int(match, 2, 3)
             if wkday_name in self.weekday_map:
@@ -715,40 +684,23 @@ class DateStringParser:
 
     @staticmethod
     def _parse_wildcard_day(date_str: str) -> DateExpr | None:
-        """Parse * DD or *DD format (e.g., * 9, *15)."""
-        match = re.fullmatch(r"\*\s*(\d{1,2})", date_str)
-        if match:
-            return WildcardDay(int(match.group(1)))
-        return None
-
-    @staticmethod
-    def _parse_every_day(date_str: str) -> DateExpr | None:
-        """Parse ** or * * format (every day of the year)."""
-        if re.fullmatch(r"\*\s*\*", date_str):
-            return EveryDay()
+        """Parse * DD, *DD, or DD * format (e.g., * 9, *15, 15 *)."""
+        if match := re.fullmatch(r"\*\s*(\d{1,2})|(\d{1,2})\s+\*", date_str):
+            return WildcardDay(int(match.group(1) or match.group(2)))
         return None
 
     def _parse_month_wildcard(self, date_str: str) -> DateExpr | None:
         """Parse Month* or Month * format (every day of that month, e.g., June*)."""
-        match = re.fullmatch(rf"({_LETTER}+)\s*\*", date_str)
-        if match:
+        if match := re.fullmatch(rf"({_LETTER}+)\s*\*", date_str):
             month_name = match.group(1)
             if month_name in self.month_map:
                 return EveryDayOfMonth(self.month_map[month_name])
         return None
 
-    def _parse_wildcard_day_reversed(self, date_str: str) -> DateExpr | None:
-        """Parse DD * format (e.g., 15 * for 15th of every month)."""
-        match = re.fullmatch(r"(\d{1,2})\s+\*", date_str)
-        if match:
-            return WildcardDay(int(match.group(1)))
-        return None
-
     def _parse_wkday_ord_month(self, date_str: str) -> DateExpr | None:
         """Parse WkdayOrd Month format (e.g., SunFirst Aug, SunThird Jul)."""
         ordinals = self.ordinals_re
-        match = re.fullmatch(rf"({_LETTER}+)({ordinals})\s+({_LETTER}+)", date_str)
-        if match:
+        if match := re.fullmatch(rf"({_LETTER}+)({ordinals})\s+({_LETTER}+)", date_str):
             wkday_name = match.group(1)
             month_name = match.group(3)
             if wkday_name in self.weekday_map and month_name in self.month_map:
@@ -758,15 +710,6 @@ class DateStringParser:
                     self.weekday_map[wkday_name],
                     n,
                 )
-        return None
-
-    def _parse_dd_month(self, date_str: str) -> DateExpr | None:
-        """Parse DD Month format (e.g., 01 Jan, 21 Apr)."""
-        match = re.fullmatch(rf"(\d{{1,2}})\s+({_LETTER}+)", date_str)
-        if match:
-            month_name = match.group(2)
-            if month_name in self.month_map:
-                return FixedDate(self.month_map[month_name], int(match.group(1)))
         return None
 
     _WKDAY_REL_RE: ClassVar[re.Pattern[str]] = re.compile(
@@ -795,10 +738,8 @@ class DateStringParser:
         base_anchor = offset_match.group(1).strip()
         anchor_offset = int(offset_match.group(2)) if offset_match.group(2) else 0
 
-        anchor_date = (
-            self._parse_month_dd(base_anchor)
-            or self._parse_dd_month(base_anchor)
-            or self._parse_mm_dd(base_anchor)
+        anchor_date = self._parse_month_day(base_anchor) or self._parse_slash_dd(
+            base_anchor
         )
         if not isinstance(anchor_date, FixedDate):
             return None
@@ -820,31 +761,23 @@ class DateStringParser:
                 self._parse_full_date(date_str)
                 or self._parse_mm_wkday_offset(date_str)
                 or self._parse_ordinal_weekday(date_str)
-                or self._parse_month_slash_dd(date_str)
-                or self._parse_mm_dd(date_str)
+                or self._parse_slash_dd(date_str)
             )
 
         # Non-slash patterns, tried most-specific first
         return (
             self._parse_month_wkday_offset(date_str)
-            or self._parse_month_dd(date_str)
+            or self._parse_month_day(date_str)
             or self._parse_month_wildcard(date_str)
-            or self._parse_every_day(date_str)
+            or (EveryDay() if re.fullmatch(r"\*\s*\*", date_str) else None)
             or self._parse_wildcard_wkday(date_str)
             or self._parse_wildcard_day(date_str)
             or self._parse_wkday_ord_month(date_str)
-            or self._parse_wildcard_day_reversed(date_str)
-            or self._parse_dd_month(date_str)
         )
 
 
 def remove_comments(code: str) -> str:
-    """Remove comments from C/C++ code.
-
-    This function removes both block comments (/* ... */) and line comments (// ...).
-
-    However, it does not handle nested comments or comments within strings.
-    """
+    """Remove C-style block and line comments (does not handle nesting or strings)."""
     code = re.sub(r"/\*.*?\*/", "", code, flags=re.DOTALL)  # Remove block comments
     return re.sub(r"(?:^|\s)//.*", "", code)  # Remove line comments
 
@@ -876,8 +809,7 @@ class SimpleCPP:
             stripped = line.strip()
 
             if stripped.startswith("#include"):
-                match = re.match(r'#include\s+[<"]([^">]+)[">]', stripped)
-                if match:
+                if match := re.match(r'#include\s+[<"]([^">]+)[">]', stripped):
                     include_target = Path(match.group(1))
                     include_file = self.resolve_include(include_target, abs_path.parent)
                     if include_file:
@@ -955,12 +887,7 @@ def resolve_coordinates(
     utc_offset_flag: float | None,
     longitude_flag: float | None,
 ) -> tuple[float, float]:
-    """Derive UTC offset and east longitude from -U and -l flags.
-
-    Returns:
-        (utc_offset_hours, east_longitude)
-
-    """
+    """Derive UTC offset and east longitude from -U and -l flags."""
     if utc_offset_flag is not None:
         longitude = (
             longitude_flag if longitude_flag is not None else utc_offset_flag * 15
@@ -973,12 +900,7 @@ def resolve_coordinates(
 
 
 def get_seasons(year: int, utc_offset_hours: float = 0) -> dict[str, datetime.date]:
-    """Get the dates of equinoxes and solstices for a given year.
-
-    Returns:
-        dict mapping season names to their dates
-
-    """
+    """Get the dates of equinoxes and solstices for a given year."""
     return {
         name: dt.date() for name, dt in _get_season_datetimes(year, utc_offset_hours)
     }
@@ -1005,12 +927,7 @@ def _search_moon_phases(
 
 
 def get_moon_phases(year: int, utc_offset_hours: float = 0) -> dict[str, DateSet]:
-    """Get all new and full moon dates for a given year.
-
-    Returns:
-        dict mapping "newmoon" and "fullmoon" to sets of dates
-
-    """
+    """Get all new and full moon dates for a given year."""
     return {
         name: {dt.date() for dt in _search_moon_phases(year, angle, utc_offset_hours)}
         for name, angle in [("newmoon", 0), ("fullmoon", 180)]
@@ -1032,10 +949,7 @@ def _format_frac(value: float) -> str:
 def _get_season_datetimes(
     year: int, utc_offset_hours: float
 ) -> list[tuple[str, datetime.datetime]]:
-    """Return equinox/solstice datetimes with UTC offset applied.
-
-    Returns (keyword, datetime) pairs using calendar keyword names.
-    """
+    """Return equinox/solstice (keyword, datetime) pairs with UTC offset applied."""
     seasons = astronomy.Seasons(year)
     offset = datetime.timedelta(hours=utc_offset_hours)
     return [
@@ -1105,12 +1019,7 @@ def _builtin_date_exprs(year: int, utc_offset_hours: float = 0) -> dict[str, Dat
 def parse_special_dates(
     calendar_lines: list[str], year: int, utc_offset_hours: float = 0
 ) -> dict[str, DateExpr]:
-    """Parse special date definitions and aliases from the calendar file.
-
-    Returns:
-        dict mapping date keywords to DateExpr objects
-
-    """
+    """Parse special date definitions and aliases from the calendar file."""
     date_exprs = _builtin_date_exprs(year, utc_offset_hours).copy()
 
     # Parse aliases from calendar file
@@ -1312,7 +1221,6 @@ def build_parser() -> argparse.ArgumentParser:
     ahead_group.add_argument(
         "-A",
         type=positive_int,
-        default=None,
         metavar="num",
         help="Print lines from today and next num business days (forward, future). "
         "Weekend days after 'Friday' are included for free. "
@@ -1321,7 +1229,6 @@ def build_parser() -> argparse.ArgumentParser:
     ahead_group.add_argument(
         "-W",
         type=positive_int,
-        default=None,
         metavar="num",
         help="Print lines from today and next num calendar days (forward, future). "
         "No Friday/weekend expansion.",
@@ -1346,14 +1253,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-l",
         type=float,
-        default=None,
         metavar="longitude",
         help="East longitude of your stranding. Default derived from UTC offset.",
     )
     parser.add_argument(
         "-U",
         type=float,
-        default=None,
         metavar="utc-offset",
         help="UTC offset in hours (e.g. -8 for PST, 1 for CET). "
         "Default derived from system timezone.",
@@ -1361,14 +1266,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-D",
         choices=["sun", "moon"],
-        default=None,
         metavar="sun|moon",
         help="Print diagnostic sun or moon information and exit.",
     )
     parser.add_argument(
         "-t",
         metavar="date",
-        default=None,
         dest="today",
         # Positional format from OpenBSD/Debian; dot-separated from macOS/FreeBSD.
         help="Act like the specified value is 'today' instead of using the current "
@@ -1381,7 +1284,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-w",
         action="store_true",
-        default=False,
         help="Print day of the week name in front of each event.",
     )
     parser.add_argument(
@@ -1419,10 +1321,7 @@ def get_matching_events(
     dates_to_check: DateSet,
     parser: DateStringParser,
 ) -> list[Event]:
-    """Get events from this line that match any of the target dates.
-
-    Returns one Event per matching date, or an empty list if nothing matches.
-    """
+    """Get events from this line that match any of the target dates."""
     if not line.strip() or "\t" not in line:
         return []
 
@@ -1433,7 +1332,7 @@ def get_matching_events(
 
     if expr is None and date_str.rstrip().endswith("*"):
         explicit_variable = True
-        date_str = date_str.rstrip()[:-1]
+        date_str = date_str.rstrip().removesuffix("*")
         expr = parser.parse(date_str)
 
     if expr is None:
