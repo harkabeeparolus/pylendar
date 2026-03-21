@@ -1,11 +1,12 @@
-"""Tests for parse_today_arg (the -t flag) and _parse_dot_date."""
+"""Tests for resolve_today (the -t flag) and _parse_dot_date."""
 
 import calendar
 import datetime
 
+import dateutil.easter
 import pytest
 
-from pylendar.pylendar import main, parse_today_arg
+from pylendar.pylendar import main, resolve_today
 
 _TODAY = datetime.date.today()
 
@@ -35,7 +36,7 @@ _TODAY = datetime.date.today()
 )
 def test_positional_formats(arg: str, expected: datetime.date) -> None:
     """Parse positional date formats (DD, MMDD, YYMMDD, CCYYMMDD)."""
-    assert parse_today_arg(arg) == expected
+    assert resolve_today(arg) == expected
 
 
 # --- ISO 8601 format ---
@@ -48,12 +49,26 @@ def test_positional_formats(arg: str, expected: datetime.date) -> None:
         ("1999-12-31", datetime.date(1999, 12, 31)),
         ("May 15", datetime.date(_TODAY.year, 5, 15)),
         ("15 May", datetime.date(_TODAY.year, 5, 15)),
+        ("easter", dateutil.easter.easter(_TODAY.year)),
+        ("Easter", dateutil.easter.easter(_TODAY.year)),
+        (
+            "paskha",
+            dateutil.easter.easter(_TODAY.year, method=dateutil.easter.EASTER_ORTHODOX),
+        ),
     ],
-    ids=["typical", "end-of-century", "month-day", "day-month"],
+    ids=[
+        "typical",
+        "end-of-century",
+        "month-day",
+        "day-month",
+        "easter",
+        "easter-uppercase",
+        "paskha",
+    ],
 )
 def test_iso_formats(arg: str, expected: datetime.date) -> None:
     """Parse ISO and single-date parser expressions in -t."""
-    assert parse_today_arg(arg) == expected
+    assert resolve_today(arg) == expected
 
 
 def test_weekday_relative_expression() -> None:
@@ -62,7 +77,7 @@ def test_weekday_relative_expression() -> None:
     candidate = anchor + datetime.timedelta(days=1)
     while candidate.weekday() != calendar.SATURDAY:
         candidate += datetime.timedelta(days=1)
-    assert parse_today_arg("Sat>Jun 19") == candidate
+    assert resolve_today("Sat>Jun 19") == candidate
 
 
 # --- macOS/FreeBSD dot-separated format ---
@@ -89,7 +104,7 @@ def test_weekday_relative_expression() -> None:
 )
 def test_dot_formats(arg: str, expected: datetime.date) -> None:
     """Parse dot-separated date formats (dd.mm, dd.mm.year)."""
-    assert parse_today_arg(arg) == expected
+    assert resolve_today(arg) == expected
 
 
 # --- Error cases ---
@@ -108,6 +123,7 @@ def test_dot_formats(arg: str, expected: datetime.date) -> None:
         ("2026-02-30", r"Invalid|does not resolve"),
         ("Friday", r"Ambiguous"),
         ("* 15", r"Ambiguous"),
+        ("fullmoon", r"Ambiguous"),
     ],
     ids=[
         "trailing-dot",
@@ -120,12 +136,13 @@ def test_dot_formats(arg: str, expected: datetime.date) -> None:
         "iso-bad-day",
         "weekday-ambiguous",
         "wildcard-ambiguous",
+        "fullmoon-multi-date",
     ],
 )
 def test_invalid_inputs(arg: str, match: str) -> None:
     """Reject malformed date strings with appropriate error messages."""
     with pytest.raises(Exception, match=match):
-        parse_today_arg(arg)
+        resolve_today(arg)
 
 
 # --- CLI integration ---
@@ -137,3 +154,11 @@ def test_cli_dot_format(tmp_path, capsys):
     cal.write_text("07/04\tIndependence Day\n")
     main(["-t", "4.7.2026", "-f", str(cal)])
     assert "Jul  4\tIndependence Day" in capsys.readouterr().out
+
+
+def test_cli_easter(tmp_path, capsys):
+    """End-to-end: -t easter selects events matching the Easter date."""
+    cal = tmp_path / "calendar"
+    cal.write_text("Easter\tHappy Easter!\n")
+    main(["-t", "easter", "-f", str(cal)])
+    assert "Happy Easter!" in capsys.readouterr().out

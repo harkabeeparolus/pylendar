@@ -29,6 +29,7 @@ import argparse
 import calendar
 import contextlib
 import datetime
+import functools
 import locale
 import logging
 import os
@@ -349,8 +350,13 @@ def cli(argv: list[str] | None = None) -> None:
 
     utc_offset, longitude = resolve_coordinates(args.U, args.l)
 
+    try:
+        today = resolve_today(args.today, utc_offset)
+    except (argparse.ArgumentTypeError, ValueError) as e:
+        parser.error(str(e))
+
     if args.D:
-        print_diagnostic(args.D, args.today.year, utc_offset, longitude)
+        print_diagnostic(args.D, today.year, utc_offset, longitude)
         return
 
     calendar_path = (
@@ -361,9 +367,8 @@ def cli(argv: list[str] | None = None) -> None:
         return
 
     friday = bsd_to_python_weekday(args.F)
-    ahead_value = args.W if args.W is not None else args.A
     opts = CalendarOptions(
-        ahead=ahead_value,
+        ahead=args.W if args.W is not None else args.A,
         behind=args.B,
         friday=friday,
         expand_weekends=args.A is not None,
@@ -372,7 +377,7 @@ def cli(argv: list[str] | None = None) -> None:
         include_dirs=DEFAULT_CALENDAR_PATHS,
     )
     try:
-        lines = process_calendar(calendar_path, args.today, opts)
+        lines = process_calendar(calendar_path, today, opts)
     except (OSError, SyntaxError) as e:
         sys.exit(f"Error: Could not read calendar file: {e}")
 
@@ -1080,6 +1085,35 @@ def print_diagnostic(mode: str, year: int, utc_offset: float, longitude: float) 
             print(f"{label} {year}:\t{entries}")
 
 
+@functools.lru_cache
+def _builtin_date_exprs(year: int, utc_offset_hours: float = 0) -> dict[str, DateExpr]:
+    """Compute built-in special date expressions (Easter, seasons, moon phases, etc.).
+
+    Cached so that both ``resolve_today`` and ``parse_special_dates`` share the
+    same computation without paying the cost twice.  Callers that need to add
+    aliases **must** copy the returned dict before mutating it.
+    """
+    date_exprs: dict[str, DateExpr] = {}
+
+    date_exprs["easter"] = ResolvedDate.of(dateutil.easter.easter(year))
+    date_exprs["paskha"] = ResolvedDate.of(
+        dateutil.easter.easter(year, method=dateutil.easter.EASTER_ORTHODOX)
+    )
+    date_exprs["chinesenewyear"] = ResolvedDate.of(LunarDate(year, 1, 1).toSolarDate())
+
+    date_exprs |= {
+        name: ResolvedDate.of(date)
+        for name, date in get_seasons(year, utc_offset_hours).items()
+    }
+
+    date_exprs |= {
+        name: ResolvedDate(frozenset(dates))
+        for name, dates in get_moon_phases(year, utc_offset_hours).items()
+    }
+
+    return date_exprs
+
+
 def parse_special_dates(
     calendar_lines: list[str], year: int, utc_offset_hours: float = 0
 ) -> dict[str, DateExpr]:
@@ -1089,26 +1123,7 @@ def parse_special_dates(
         dict mapping date keywords to DateExpr objects
 
     """
-    date_exprs: dict[str, DateExpr] = {}
-
-    # Start with known special dates
-    date_exprs["easter"] = ResolvedDate.of(dateutil.easter.easter(year))
-    date_exprs["paskha"] = ResolvedDate.of(
-        dateutil.easter.easter(year, method=dateutil.easter.EASTER_ORTHODOX)
-    )
-    date_exprs["chinesenewyear"] = ResolvedDate.of(LunarDate(year, 1, 1).toSolarDate())
-
-    # Add astronomical season dates
-    date_exprs |= {
-        name: ResolvedDate.of(date)
-        for name, date in get_seasons(year, utc_offset_hours).items()
-    }
-
-    # Add moon phases as recurring dates
-    date_exprs |= {
-        name: ResolvedDate(frozenset(dates))
-        for name, dates in get_moon_phases(year, utc_offset_hours).items()
-    }
+    date_exprs = _builtin_date_exprs(year, utc_offset_hours).copy()
 
     # Parse aliases from calendar file
     for line in calendar_lines:
@@ -1183,70 +1198,70 @@ def _parse_dot_date(t_str: str) -> datetime.date:
         raise argparse.ArgumentTypeError(msg) from None
 
 
-def _parse_single_date_expr_for_today(
-    t_str: str, *, today: datetime.date
-) -> datetime.date:
-    """Parse a non-legacy -t expression and require a single resolved date.
+def _parse_legacy_today(t_str: str) -> datetime.date | None:
+    """Try to parse -t as a legacy numeric or dot-separated format.
 
-    This delegates to ``DateStringParser`` so -t can share pylendar's
-    date-expression syntax. Expressions that resolve to zero or multiple
-    dates are rejected because -t must represent exactly one date.
+    Returns the parsed date, or ``None`` if the string is not a legacy format.
     """
-    date_expr = DateStringParser().parse(t_str)
-    if date_expr is None:
-        msg = f"Invalid -t date format: {t_str}"
-        raise argparse.ArgumentTypeError(msg)
+    if "." in t_str:
+        return _parse_dot_date(t_str)
+    today = datetime.date.today()
+    # cSpell:ignore mmdd, ccyymmdd
+    if re.fullmatch(r"\d{2}", t_str):
+        return datetime.date(today.year, today.month, int(t_str))
+    if re.fullmatch(r"\d{4}", t_str):
+        return datetime.date(today.year, int(t_str[:2]), int(t_str[2:]))
+    if re.fullmatch(r"\d{6}", t_str):
+        yy = int(t_str[:2])
+        mm = int(t_str[2:4])
+        dd = int(t_str[4:])
+        cc = (
+            YY_CENTURY_1900 if YY_PIVOT_START <= yy <= YY_PIVOT_END else YY_CENTURY_2000
+        )
+        return datetime.date(cc * 100 + yy, mm, dd)
+    if re.fullmatch(r"\d{8}", t_str):
+        return datetime.date(int(t_str[:4]), int(t_str[4:6]), int(t_str[6:]))
+    return None
 
-    resolved = date_expr.resolve(today.year)
-    if not resolved:
-        msg = f"Date does not resolve in year {today.year}: {t_str}"
-        raise argparse.ArgumentTypeError(msg)
-    if len(resolved) > 1:
-        msg = f"Ambiguous -t date format (matches multiple dates): {t_str}"
-        raise argparse.ArgumentTypeError(msg)
-    return next(iter(resolved))
 
-
-def parse_today_arg(t_str: str) -> datetime.date:
-    """Parse the -t argument and return a datetime.date object.
+def resolve_today(t_str: str | None, utc_offset_hours: float = 0) -> datetime.date:
+    """Resolve the -t argument into a concrete date.
 
     Acceptable formats:
       - OpenBSD/Debian positional: dd, mmdd, yymmdd, ccyymmdd
       - macOS/FreeBSD dot-separated: dd.mm, dd.mm.year
       - Any pylendar date expression that resolves to exactly one date
+        (including special dates like Easter that need UTC offset)
+
+    Returns ``datetime.date.today()`` when *t_str* is ``None``.
+
+    Raises:
+        argparse.ArgumentTypeError: On invalid or ambiguous input.
+
     """
+    if t_str is None:
+        return datetime.date.today()
+
     t_str = t_str.strip()
-    today = datetime.date.today()
+    legacy = _parse_legacy_today(t_str)
+    if legacy is not None:
+        return legacy
 
-    if "." in t_str:
-        return _parse_dot_date(t_str)
-    # cSpell:ignore mmdd, ccyymmdd
-    if re.fullmatch(r"\d{2}", t_str):
-        # dd
-        return datetime.date(today.year, today.month, int(t_str))
-    if re.fullmatch(r"\d{4}", t_str):
-        # mmdd
-        return datetime.date(today.year, int(t_str[:2]), int(t_str[2:]))
-    if re.fullmatch(r"\d{6}", t_str):
-        # yymmdd
-        yy = int(t_str[:2])
-        mm = int(t_str[2:4])
-        dd = int(t_str[4:])
-        # Determine the century based on the year
-        # If yy is between 69 and 99, assume 1900s; otherwise assume 2000s
-        cc = (
-            YY_CENTURY_1900 if YY_PIVOT_START <= yy <= YY_PIVOT_END else YY_CENTURY_2000
-        )
-        year = cc * 100 + yy
-        return datetime.date(year, mm, dd)
-    if re.fullmatch(r"\d{8}", t_str):
-        # ccyymmdd
-        year = int(t_str[:4])
-        mm = int(t_str[4:6])
-        dd = int(t_str[6:])
-        return datetime.date(year, mm, dd)
+    year = datetime.date.today().year
+    date_exprs = _builtin_date_exprs(year, utc_offset_hours)
+    date_expr = DateStringParser(date_exprs).parse(t_str)
+    if date_expr is None:
+        msg = f"Invalid -t date format: {t_str}"
+        raise argparse.ArgumentTypeError(msg)
 
-    return _parse_single_date_expr_for_today(t_str, today=today)
+    resolved = date_expr.resolve(year)
+    if not resolved:
+        msg = f"Date does not resolve in year {year}: {t_str}"
+        raise argparse.ArgumentTypeError(msg)
+    if len(resolved) > 1:
+        msg = f"Ambiguous -t date format (matches multiple dates): {t_str}"
+        raise argparse.ArgumentTypeError(msg)
+    return next(iter(resolved))
 
 
 def get_dates_to_check(
@@ -1370,8 +1385,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-t",
         metavar="date",
-        type=parse_today_arg,
-        default=datetime.date.today(),
+        default=None,
         dest="today",
         # Positional format from OpenBSD/Debian; dot-separated from macOS/FreeBSD.
         help="Act like the specified value is 'today' instead of using the current "
