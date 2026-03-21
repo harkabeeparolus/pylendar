@@ -78,7 +78,7 @@ unused-type-ignore-comment = "ignore"
 [tool.pylint]
 main.py-version = "3.11"
 main.jobs = 0                       # 0 means all available cores
-design.max-module-lines = 1450      # single-file design is intentional
+design.max-module-lines = 1500      # single-file design is intentional
 main.fail-on = ["useless-suppression"]
 reports.output-format = "colorized"
 

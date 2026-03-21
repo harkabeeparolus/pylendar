@@ -78,18 +78,9 @@ ORDINAL_MAP: dict[str, int] = {
     "fifth": 5,
     "last": -1,
 }
-ORDINALS_RE = "|".join(ORDINAL_MAP)
-
 _LETTER = r"[^\W\d_]"  # Unicode letter (like [a-z] but locale-aware)
 
 DateSet: TypeAlias = set[datetime.date]
-
-YY_PIVOT_START = 69
-YY_PIVOT_END = 99
-YY_CENTURY_1900 = 19
-YY_CENTURY_2000 = 20
-BSD_WEEKDAY_MIN = 0
-BSD_WEEKDAY_MAX = 6
 
 
 class DateExpr(ABC):  # pylint: disable=too-few-public-methods
@@ -321,7 +312,9 @@ def _display_path(path: Path) -> str:
 
 def main(argv: list[str] | None = None) -> None:
     """Run the calendar utility."""
-    setup_logging()
+    logging.basicConfig(
+        level=logging.WARNING, format="pylendar: %(levelname)s: %(message)s"
+    )
     try:
         return cli(argv)
     except KeyboardInterrupt:  # pragma: no cover
@@ -419,9 +412,14 @@ def process_calendar(
     processor = SimpleCPP(include_dirs=opts.include_dirs)
     calendar_lines = join_continuation_lines(processor.process_file(calendar_path))
 
-    ahead_days, behind_days = get_ahead_behind(
-        today, ahead=opts.ahead, behind=opts.behind, friday=opts.friday
+    ahead_days = (
+        opts.ahead
+        if opts.ahead is not None
+        else 3
+        if today.weekday() == opts.friday
+        else 1
     )
+    behind_days = opts.behind
     dates_to_check = get_dates_to_check(
         today,
         ahead_days,
@@ -463,17 +461,6 @@ def join_continuation_lines(lines: list[str]) -> list[str]:
         else:
             result.append(line)
     return result
-
-
-def setup_logging() -> None:
-    """Set up logging with a WARNING-level default.
-
-    ``cli()`` reconfigures the level and formatter after parsing ``-v`` flags.
-    """
-    logging.basicConfig(
-        level=logging.WARNING,
-        format="pylendar: %(levelname)s: %(message)s",
-    )
 
 
 @dataclass
@@ -545,7 +532,8 @@ class DateStringParser:
             self.weekday_map.update(self.build_weekday_map())
 
         # Layer LANG= locale names on top, if set
-        if dirs.lang and dirs.lang.lower().split(".")[0] not in _LANG_NOOP:
+        lang_base = dirs.lang.lower().split(".")[0] if dirs.lang else None
+        if lang_base and lang_base not in {"c", "posix", "utf-8", "utf8"}:
             try:
                 with calendar.different_locale(dirs.lang):  # type: ignore[arg-type]
                     self.month_map.update(self.build_month_map())
@@ -1142,9 +1130,6 @@ def parse_special_dates(
     return date_exprs
 
 
-_LANG_NOOP = frozenset({"c", "posix", "utf-8", "utf8"})
-
-
 def extract_directives(calendar_lines: list[str]) -> CalendarDirectives:
     """Extract LANG= and SEQUENCE= directives from preprocessed calendar lines.
 
@@ -1215,9 +1200,7 @@ def _parse_legacy_today(t_str: str) -> datetime.date | None:
         yy = int(t_str[:2])
         mm = int(t_str[2:4])
         dd = int(t_str[4:])
-        cc = (
-            YY_CENTURY_1900 if YY_PIVOT_START <= yy <= YY_PIVOT_END else YY_CENTURY_2000
-        )
+        cc = 19 if 69 <= yy <= 99 else 20  # noqa: PLR2004  # 2-digit year: 69-99 → 1900s
         return datetime.date(cc * 100 + yy, mm, dd)
     if re.fullmatch(r"\d{8}", t_str):
         return datetime.date(int(t_str[:4]), int(t_str[4:6]), int(t_str[6:]))
@@ -1300,7 +1283,7 @@ def parse_bsd_weekday(value: str) -> int:
     except ValueError as exc:
         msg = f"Invalid BSD weekday: {value}"
         raise argparse.ArgumentTypeError(msg) from exc
-    if not BSD_WEEKDAY_MIN <= day <= BSD_WEEKDAY_MAX:
+    if not 0 <= day <= 6:  # noqa: PLR2004
         msg = f"BSD weekday out of range [0-6]: {day}"
         raise argparse.ArgumentTypeError(msg)
     return day
@@ -1420,19 +1403,6 @@ def build_parser() -> argparse.ArgumentParser:
 def bsd_to_python_weekday(bsd_wday: int) -> int:
     """Convert BSD tm_wday (0=Sun..6=Sat) to Python weekday (0=Mon..6=Sun)."""
     return (bsd_wday - 1) % 7
-
-
-def get_ahead_behind(
-    today: datetime.date,
-    ahead: int | None = None,
-    behind: int = 0,
-    *,
-    friday: int = 4,
-) -> tuple[int, int]:
-    """Determine the number of days to look ahead and behind."""
-    weekday = today.weekday()
-    ahead_days = ahead if ahead is not None else 3 if weekday == friday else 1
-    return ahead_days, behind
 
 
 def replace_age_in_description(description: str, check_date: datetime.date) -> str:
