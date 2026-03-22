@@ -267,8 +267,6 @@ class EveryWeekday(DateExpr):
 class WeekdayRelativeToDate(DateExpr):
     """Weekday strictly before or after a fixed date (e.g., Sat>Jun 19)."""
 
-    _MAX_WEEKDAY: ClassVar[int] = 6
-
     month: int
     day: int
     weekday: int  # 0=Mon ... 6=Sun
@@ -280,7 +278,7 @@ class WeekdayRelativeToDate(DateExpr):
         if self.direction not in {-1, 1}:
             msg = f"direction must be -1 or 1, got {self.direction}"
             raise ValueError(msg)
-        if not 0 <= self.weekday <= self._MAX_WEEKDAY:
+        if not 0 <= self.weekday <= 6:  # noqa: PLR2004
             msg = f"weekday must be in range 0..6, got {self.weekday}"
             raise ValueError(msg)
 
@@ -292,13 +290,8 @@ class WeekdayRelativeToDate(DateExpr):
             )
         except ValueError:
             return set()
-        delta = self.direction
-        candidate = anchor + datetime.timedelta(days=delta)
-        for _ in range(self._MAX_WEEKDAY + 1):
-            if candidate.weekday() == self.weekday:
-                return {candidate}
-            candidate += datetime.timedelta(days=delta)
-        return set()
+        diff = (self.direction * (self.weekday - anchor.weekday())) % 7 or 7
+        return {anchor + datetime.timedelta(days=diff * self.direction)}
 
 
 def _display_path(path: Path) -> str:
@@ -382,7 +375,7 @@ class CalendarDirectives:
     sequence: tuple[str, ...] | None = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class CalendarOptions:
     """Options for calendar processing."""
 
@@ -517,16 +510,14 @@ class DateStringParser:
 
         # Layer C/English names on top
         with calendar.different_locale("C"):  # type: ignore[arg-type]
-            self.month_map.update(self.build_month_map())
-            self.weekday_map.update(self.build_weekday_map())
+            self._layer_locale_maps()
 
         # Layer LANG= locale names on top, if set
         lang_base = dirs.lang.lower().split(".")[0] if dirs.lang else None
         if lang_base and lang_base not in {"c", "posix", "utf-8", "utf8"}:
             try:
                 with calendar.different_locale(dirs.lang):  # type: ignore[arg-type]
-                    self.month_map.update(self.build_month_map())
-                    self.weekday_map.update(self.build_weekday_map())
+                    self._layer_locale_maps()
                 log.info(f"Using locale: {dirs.lang}")
             except locale.Error:
                 log.warning(f"LANG={dirs.lang}: locale not available; ignoring")
@@ -557,6 +548,11 @@ class DateStringParser:
             for s in (calendar.day_name, calendar.day_abbr)
             for n, d in enumerate(s)
         }
+
+    def _layer_locale_maps(self) -> None:
+        """Update month/weekday maps from the currently active locale."""
+        self.month_map.update(self.build_month_map())
+        self.weekday_map.update(self.build_weekday_map())
 
     def parse(self, date_str: str) -> DateExpr | None:
         """Parse a date string from the calendar file.
@@ -1097,20 +1093,22 @@ def _parse_legacy_today(t_str: str) -> datetime.date | None:
     """
     if "." in t_str:
         return _parse_dot_date(t_str)
-    today = datetime.date.today()
     # cSpell:ignore mmdd, ccyymmdd
-    if re.fullmatch(r"\d{2}", t_str):
-        return datetime.date(today.year, today.month, int(t_str))
-    if re.fullmatch(r"\d{4}", t_str):
-        return datetime.date(today.year, int(t_str[:2]), int(t_str[2:]))
-    if re.fullmatch(r"\d{6}", t_str):
-        yy = int(t_str[:2])
-        mm = int(t_str[2:4])
-        dd = int(t_str[4:])
-        cc = 19 if 69 <= yy <= 99 else 20  # noqa: PLR2004  # 2-digit year: 69-99 → 1900s
-        return datetime.date(cc * 100 + yy, mm, dd)
-    if re.fullmatch(r"\d{8}", t_str):
-        return datetime.date(int(t_str[:4]), int(t_str[4:6]), int(t_str[6:]))
+    if t_str.isdigit():
+        today = datetime.date.today()
+        match len(t_str):
+            case 2:  # dd
+                return datetime.date(today.year, today.month, int(t_str))
+            case 4:  # mmdd
+                return datetime.date(today.year, int(t_str[:2]), int(t_str[2:]))
+            case 6:  # yymmdd
+                yy = int(t_str[:2])
+                mm = int(t_str[2:4])
+                dd = int(t_str[4:])
+                cc = 19 if 69 <= yy <= 99 else 20  # noqa: PLR2004  # 69-99 → 1900s
+                return datetime.date(cc * 100 + yy, mm, dd)
+            case 8:  # ccyymmdd
+                return datetime.date(int(t_str[:4]), int(t_str[4:6]), int(t_str[6:]))
     return None
 
 
@@ -1337,9 +1335,7 @@ def get_matching_events(
         return []
 
     years = {d.year for d in dates_to_check}
-    resolved: DateSet = set()
-    for year in years:
-        resolved |= expr.resolve(year)
+    resolved = {d for y in years for d in expr.resolve(y)}
     matching = resolved & dates_to_check
 
     variable = explicit_variable or expr.variable
