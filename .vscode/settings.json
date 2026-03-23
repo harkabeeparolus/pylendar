@@ -12,5 +12,6 @@
         "newmoon",
         "pylendar",
         "sepequinox"
-    ]
+    ],
+    "python.analysis.typeCheckingMode": "strict"
 }

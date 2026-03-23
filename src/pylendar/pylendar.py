@@ -793,7 +793,7 @@ class SimpleCPP:
         log.info(f"Processing: {_display_path(abs_path)}")
         self.included_files.add(abs_path)
 
-        lines = []
+        lines: list[str] = []
         try:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
@@ -1109,6 +1109,8 @@ def _parse_legacy_today(t_str: str) -> datetime.date | None:
                 return datetime.date(cc * 100 + yy, mm, dd)
             case 8:  # ccyymmdd
                 return datetime.date(int(t_str[:4]), int(t_str[4:6]), int(t_str[6:]))
+            case _:
+                pass
     return None
 
 
