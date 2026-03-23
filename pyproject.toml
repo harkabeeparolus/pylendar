@@ -37,6 +37,7 @@ dev = [
     "pytest-cov>=6.0",
     "ty>=0.0.17",
     "types-python-dateutil>=2.9.0.20260124",
+    "basedpyright>=1.38.2",
 ]
 
 # Linting configuration
@@ -64,6 +65,18 @@ ignore = [
     "DTZ",    # flake8-datetimez (DTZ)
     "G004",   # flake8-logging-format (G): logging-f-string
 ]
+
+[tool.basedpyright]
+pythonVersion = "3.11"
+stubPath = "typings"
+typeCheckingMode = "all"
+reportImplicitOverride = false              # 12+ DateExpr.resolve() overrides + __str__
+reportAny = false                           # argparse returns Any; mypy strict allows this
+reportUnusedCallResult = false              # argparse add_argument() returns are unused
+reportImplicitStringConcatenation = false   # conflicts with ruff/black formatting
+# TODO: re-enable these two and use per-line # pyright: ignore comments instead
+reportIncompatibleVariableOverride = false  # OffsetDateExpr.variable property override
+reportArgumentType = false                  # calendar.different_locale() stdlib stub mismatch
 
 [tool.mypy]
 python_version = "3.11"

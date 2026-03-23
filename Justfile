@@ -53,7 +53,7 @@ fix:
 
 # Run all linting and type checking tools
 [group('details')]
-lint: pylint mypy ty
+lint: pylint mypy ty basedpyright
 
 # Run pylint (exit code 8 = warnings only, not errors)
 [group('details')]
@@ -69,6 +69,11 @@ mypy:
 [group('details')]
 ty:
     uv run ty check
+
+# Run basedpyright type checking
+[group('details')]
+basedpyright:
+    uv run basedpyright src/
 
 # Show project status
 status:

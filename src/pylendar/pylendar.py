@@ -501,7 +501,7 @@ class DateStringParser:
         directives: CalendarDirectives | None = None,
     ) -> None:
         """Initialize the parser with optional date expressions and directives."""
-        self.date_exprs = date_exprs or {}
+        self.date_exprs: dict[str, DateExpr] = date_exprs or {}
         dirs = directives or CalendarDirectives()
 
         # Start with system locale names
@@ -781,7 +781,7 @@ class SimpleCPP:
 
     def __init__(self, include_dirs: Sequence[Path | str]) -> None:
         """Initialize the preprocessor with include directories."""
-        self.include_dirs = [Path(d) for d in include_dirs]
+        self.include_dirs: list[Path] = [Path(d) for d in include_dirs]
         self.included_files: set[Path] = set()
 
     def process_file(self, path: Path) -> list[str]:
