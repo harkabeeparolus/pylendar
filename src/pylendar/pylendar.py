@@ -509,14 +509,17 @@ class DateStringParser:
         self.weekday_map = self.build_weekday_map()
 
         # Layer C/English names on top
-        with calendar.different_locale("C"):  # type: ignore[arg-type]
+        with calendar.different_locale(("C", "UTF-8")):
             self._layer_locale_maps()
 
         # Layer LANG= locale names on top, if set
         lang_base = dirs.lang.lower().split(".")[0] if dirs.lang else None
         if lang_base and lang_base not in {"c", "posix", "utf-8", "utf8"}:
             try:
-                with calendar.different_locale(dirs.lang):  # type: ignore[arg-type]
+                lang_parts = dirs.lang.split(".", 1) if dirs.lang else []
+                encoding = lang_parts[1] if len(lang_parts) > 1 else "UTF-8"
+                lang_locale = (lang_parts[0], encoding)
+                with calendar.different_locale(lang_locale):
                     self._layer_locale_maps()
                 log.info(f"Using locale: {dirs.lang}")
             except locale.Error:
@@ -1337,7 +1340,10 @@ def get_matching_events(
         return []
 
     years = {d.year for d in dates_to_check}
-    resolved = {d for y in years for d in expr.resolve(y)}
+    # Check adjacent years to catch expressions that shift across year boundaries
+    # (e.g., Sun>Dec 25+7 anchored in year Y but resolving to year Y+1).
+    check_years = {y for base_y in years for y in (base_y - 1, base_y, base_y + 1)}
+    resolved = {d for y in check_years for d in expr.resolve(y)}
     matching = resolved & dates_to_check
 
     variable = explicit_variable or expr.variable

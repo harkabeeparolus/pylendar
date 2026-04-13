@@ -729,3 +729,17 @@ def test_get_matching_events_unparseable_date_returns_empty() -> None:
     dates = {datetime.date(2026, 3, 1)}
     result = get_matching_events("nonsense\tSome event", dates, parser)
     assert result == []
+
+
+def test_year_boundary_relative_weekday(run_calendar):
+    """Expression anchored in Dec but resolving to Jan is found across year boundary.
+
+    Sat>Dec 25+7: Dec 25 + 7 = Jan 1, 2027 (Friday), Saturday after = Jan 2.
+    Checking from Jan 1, 2027 with ahead=3 should find Jan 2.
+    """
+    result = run_calendar(
+        "Sat>Dec 25+7\tRelative event across year boundary",
+        datetime.date(2027, 1, 1),
+        ahead=3,
+    )
+    assert result == ["Jan  2*\tRelative event across year boundary"]
