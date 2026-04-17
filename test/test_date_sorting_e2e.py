@@ -246,6 +246,14 @@ Easter-46\tAsh Wednesday
     assert result == ["Feb 18*\tAsh Wednesday"]
 
 
+def test_four_digit_special_date_offset_is_ignored(run_calendar):
+    """Absurd special-date offsets are rejected instead of crashing at runtime."""
+    content = "Easter+1000\tWay too far\n"
+    today = datetime.date(2026, 4, 5)
+    result = run_calendar(content, today, ahead=0)
+    assert result == []
+
+
 def test_paskha(run_calendar):
     """Test Paskha (Orthodox Easter) and offset expressions."""
     calendar_content = """\

@@ -249,6 +249,18 @@ def test_bogus_date_with_offset_returns_none() -> None:
     assert parser.parse("bogusdate+3") is None
 
 
+def test_special_date_with_four_digit_offset_returns_none() -> None:
+    """Offsets with more than 3 digits are rejected during parsing."""
+    parser = DateStringParser(parse_special_dates([], 2026))
+    assert parser.parse("Easter+1000") is None
+
+
+def test_ordinal_date_with_four_digit_offset_returns_none() -> None:
+    """Ordinal weekday offsets with more than 3 digits are rejected."""
+    parser = DateStringParser()
+    assert parser.parse("Oct/SatFourth+1000") is None
+
+
 # ---------------------------------------------------------------------------
 # Integration: both directives together (end-to-end via process_calendar)
 # ---------------------------------------------------------------------------

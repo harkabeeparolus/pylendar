@@ -1,8 +1,34 @@
-# Future Plans
+# TODO
 
-Features missing from pylendar compared to BSD calendar(1) implementations.
-See [manpage_comparison.md](manpage_comparison.md) for full details.
-It summarizes key findings from the `*.1.md` manpage reference copies.
+## Open follow-ups
+
+### Locale-independent output constants
+
+`Event.__str__()` and `format_event()` use `strftime("%b")` and `strftime("%a")`
+which produce locale-dependent month/weekday abbreviations. For full robustness
+on systems with non-English locales, these should use constant English
+abbreviation tuples instead of relying on the C locale being active at output
+time.
+
+### Cross-year built-in special dates
+
+`process_calendar()` currently calls `parse_special_dates(calendar_lines,
+today.year, ...)`, so built-in expressions like `NewMoon`, `FullMoon`,
+equinoxes, solstices, and Easter aliases are only materialized for one year.
+Later, `get_matching_events()` resolves parsed expressions across
+`base_year - 1`, `base_year`, and `base_year + 1` to catch year-boundary
+matches, but built-ins that were pre-resolved for `today.year` do not gain
+next-year dates.
+
+Potential bug to re-check: a Dec/Jan window may miss a built-in special date in
+the adjacent year. Repro noted during review: `NewMoon` on 2033-01-01 was not
+reported when `today=2032-12-31` and the checked range crossed into Jan 1.
+
+## Completed feature notes
+
+These were previously tracked as future plans and are already implemented.
+See [manpage_comparison.md](manpage_comparison.md) for the broader BSD
+calendar(1) comparison context.
 
 ## ~~NetBSD wildcard extensions~~ (done)
 

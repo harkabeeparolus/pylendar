@@ -567,7 +567,7 @@ class DateStringParser:
 
         # Special date with offset (e.g., Easter-2, FullMoon+1)
         # Must precede plain special-date lookup
-        if match := re.fullmatch(rf"({_LETTER}+)([+-])(\d+)", date_str):
+        if match := re.fullmatch(rf"({_LETTER}+)([+-])(\d{{1,3}})", date_str):
             offset = _parse_signed_int(match, 2, 3)
             if base := self.date_exprs.get(match.group(1)):
                 return OffsetDateExpr(base, offset)
@@ -596,10 +596,14 @@ class DateStringParser:
         """Parse BSD ordinal weekday formats (e.g., 10/MonSecond, Oct/SatFourth-2)."""
         ltr, ords = _LETTER, self.ordinals_re
 
-        if match := re.fullmatch(rf"({_NN})/({ltr}+)({ords})([+-]\d+)?", date_str):
+        if match := re.fullmatch(
+            rf"({_NN})/({ltr}+)({ords})([+-]\d{{1,3}})?", date_str
+        ):
             # MM/WkdayOrdinal with optional offset (e.g., 10/monsecond, 01/monthird)
             month = int(match.group(1))
-        elif match := re.fullmatch(rf"({ltr}+)/({ltr}+)({ords})([+-]\d+)?", date_str):
+        elif match := re.fullmatch(
+            rf"({ltr}+)/({ltr}+)({ords})([+-]\d{{1,3}})?", date_str
+        ):
             # Month/WkdayOrdinal with optional offset (e.g., oct/satfourth-2)
             if (month_name := match.group(1)) not in self.month_map:
                 return None
@@ -637,7 +641,7 @@ class DateStringParser:
 
     def _parse_mm_wkday_offset(self, date_str: str) -> DateExpr | None:
         """Parse MM/Weekday+/-N format (e.g., 03/Sun-1, 11/Wed+3, 12/Sun+1)."""
-        if match := re.fullmatch(rf"({_NN})/({_LETTER}+)([+-])(\d+)", date_str):
+        if match := re.fullmatch(rf"({_NN})/({_LETTER}+)([+-])(\d{{1,3}})", date_str):
             month = int(match.group(1))
             wkday_name = match.group(2)
             if wkday_name in self.weekday_map:
@@ -647,7 +651,9 @@ class DateStringParser:
 
     def _parse_month_wkday_offset(self, date_str: str) -> DateExpr | None:
         """Parse Month Weekday+/-N format (e.g., May Sun+2, Nov Thu+4, May Mon-1)."""
-        if match := re.fullmatch(rf"({_LETTER}+)\s+({_LETTER}+)([+-])(\d+)", date_str):
+        if match := re.fullmatch(
+            rf"({_LETTER}+)\s+({_LETTER}+)([+-])(\d{{1,3}})", date_str
+        ):
             month_name, wkday_name = match.group(1), match.group(2)
             n = _parse_signed_int(match, 3, 4)
             if month_name in self.month_map and wkday_name in self.weekday_map:
@@ -672,7 +678,7 @@ class DateStringParser:
 
     def _parse_wildcard_wkday(self, date_str: str) -> DateExpr | None:
         """Parse * Weekday+/-N format (e.g., * Fri+3)."""
-        if match := re.fullmatch(rf"\*\s+({_LETTER}+)([+-])(\d+)", date_str):
+        if match := re.fullmatch(rf"\*\s+({_LETTER}+)([+-])(\d{{1,3}})", date_str):
             wkday_name = match.group(1)
             n = _parse_signed_int(match, 2, 3)
             if wkday_name in self.weekday_map:
@@ -713,7 +719,7 @@ class DateStringParser:
         rf"(?P<wkday>{_LETTER}+)\s*(?P<dir>[<>])\s*(?P<anchor>.+)"
     )
 
-    _ANCHOR_OFFSET_RE: ClassVar[re.Pattern[str]] = re.compile(r"(.+?)([+-]\d+)?$")
+    _ANCHOR_OFFSET_RE: ClassVar[re.Pattern[str]] = re.compile(r"(.+?)([+-]\d{1,3})?$")
 
     def _parse_weekday_relative(self, date_str: str) -> DateExpr | None:
         """Parse Wkday<Date or Wkday>Date format (e.g., Sat>Jun 19, Sun<Dec 25-7)."""

@@ -134,6 +134,13 @@ def test_parse_with_positive_offset(parser: DateStringParser) -> None:
     assert result == {datetime.date(2026, 12, 27)}
 
 
+def test_parse_with_four_digit_anchor_offset_returns_none(
+    parser: DateStringParser,
+) -> None:
+    """Anchor offsets with more than 3 digits are rejected."""
+    assert parser.parse("Sun<Dec 25+1000") is None
+
+
 def test_parse_mm_dd_anchor(parser: DateStringParser) -> None:
     """Parse 'Sat>06/19' with MM/DD anchor format."""
     expr = parser.parse("Sat>06/19")
