@@ -183,9 +183,10 @@ and Last.
 
 ## Age Syntax
 
-If an event description contains a four-digit year in square brackets
+If an event description contains exactly one four-digit year in square brackets
 (e.g., `[1990]`), **pylendar** replaces it with the calculated age
-(current year minus that year). This is a pylendar extension not found
+(current year minus that year). If there are multiple tags,
+no replacement occurs. This is a pylendar extension not found
 in any BSD implementation.
 
 ## Other Conventions
@@ -275,7 +276,9 @@ following differences exist:
 
 **Age \[YYYY] syntax**
 : The `[YYYY]` age calculation in event descriptions is a pylendar
-  addition not found in any BSD implementation.
+  addition not found in any BSD implementation. If exactly one `[YYYY]`
+  tag is found in an event description, it is replaced with the calculated
+  age. If there are multiple tags, no replacement occurs.
 
 **Preprocessor: #include only**
 : **pylendar** processes only **#include** directives and C-style

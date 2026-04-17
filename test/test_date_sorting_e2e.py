@@ -712,6 +712,20 @@ def test_replace_age_no_placeholder_unchanged() -> None:
     assert result == "No year here"
 
 
+def test_replace_age_multiple_different_tags() -> None:
+    """Age replacement skipped if there are multiple tags with different years."""
+    desc = "Alice [1990] and Bob [1992]"
+    result = replace_age_in_description(desc, datetime.date(2026, 3, 1))
+    assert result == desc
+
+
+def test_replace_age_multiple_identical_tags() -> None:
+    """Age replacement skipped if there are multiple tags with the same year."""
+    desc = "Alice [1990] (born [1990])"
+    result = replace_age_in_description(desc, datetime.date(2026, 3, 1))
+    assert result == desc
+
+
 def test_event_lt_non_event_returns_not_implemented() -> None:
     """Comparing Event with a non-Event returns NotImplemented."""
     event = Event(datetime.date(2026, 1, 1), "x")

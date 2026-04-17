@@ -907,7 +907,9 @@ def _search_moon_phases(
     year: int, phase_angle: int, utc_offset_hours: float
 ) -> list[datetime.datetime]:
     """Return all moon phase datetimes for a year with UTC offset applied."""
-    start_time = astronomy.Time.Make(year, 1, 1, 0, 0, 0)
+    # Start searching from December of the previous year to catch
+    # phases that shift into the current year locally due to timezone offsets.
+    start_time = astronomy.Time.Make(year - 1, 12, 1, 0, 0, 0)
     offset = datetime.timedelta(hours=utc_offset_hours)
     results: list[datetime.datetime] = []
     search_time = start_time
@@ -916,9 +918,12 @@ def _search_moon_phases(
         if moon_phase is None:
             break
         dt = moon_phase.Utc() + offset
-        if dt.date().year != year:
+
+        if dt.date().year == year:
+            results.append(dt)
+        elif dt.date().year > year:
             break
-        results.append(dt)
+
         search_time = astronomy.Time.AddDays(moon_phase, 1)
     return results
 
@@ -1309,11 +1314,12 @@ def bsd_to_python_weekday(bsd_wday: int) -> int:
 
 
 def replace_age_in_description(description: str, check_date: datetime.date) -> str:
-    """Replace [YYYY] with calculated age in event description."""
-    if match := re.search(r"\[(\d{4})\]", description):
-        year_val = int(match.group(1))
+    """Replace exactly one [YYYY] with calculated age in event description."""
+    matches = re.findall(r"\[(\d{4})\]", description)
+    if len(matches) == 1:
+        year_val = int(matches[0])
         age = check_date.year - year_val
-        return description.replace(f"[{match.group(1)}]", str(age))
+        return description.replace(f"[{matches[0]}]", str(age))
     return description
 
 

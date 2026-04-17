@@ -56,3 +56,32 @@ def test_moon_phases_roughly_monthly():
             f"Full moons should be ~29.5 days apart, "
             f"got {days_between} days between {m1} and {m2}"
         )
+
+
+def test_moon_phases_extreme_negative_offset():
+    """Test that an extreme negative UTC offset does not skip the entire year.
+
+    In 2048, the first full moon is exactly on Jan 1st 06:57 UTC.
+    With a -8.0 offset, this shifts to Dec 31st 2047 locally. The bug previously
+    caused the loop to break on the first iteration, returning an empty set for 2048.
+    """
+    moon_phases = get_moon_phases(2048, utc_offset_hours=-8.0)
+
+    # We should still find all the other full moons for the rest of 2048
+    assert len(moon_phases["fullmoon"]) >= 12
+    assert len(moon_phases["newmoon"]) >= 12
+
+
+def test_moon_phases_extreme_positive_offset():
+    """Test that an extreme positive UTC offset does not skip late December phases.
+
+    In 2009, there is a full moon on Dec 31st 19:13 UTC.
+    With a +12.0 offset, this shifts to Jan 1st 2010 locally. The bug previously
+    caused the search to either break early or skip phases around boundaries.
+    """
+    moon_phases = get_moon_phases(2010, utc_offset_hours=12.0)
+
+    # We should catch the Jan 1st 2010 local full moon (which was Dec 31st 2009 UTC)
+    assert datetime.date(2010, 1, 1) in moon_phases["fullmoon"]
+    assert len(moon_phases["fullmoon"]) >= 12
+    assert len(moon_phases["newmoon"]) >= 12
