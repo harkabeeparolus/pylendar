@@ -173,13 +173,20 @@ The anchor date may include an offset in days: `Sun<Dec 25-7` means
 before the weekday search). The anchor date itself is never matched
 (strict before/after). This is a pylendar extension.
 
+Day offsets (`+N` / `-N`) in any date expression are limited to
+1–3 digits (±999 days). Four-digit tails are rejected so that values
+like `Sun<Dec 25-2015` aren't silently treated as a huge offset from
+an anchor date. In practice, offsets beyond a year can be expressed
+by changing the base date.
+
 Weekdays may use the ordinal names First, Second, Third, Fourth, Fifth,
 and Last.
 
 **Special dates:**
 
 - *Easter*, *Paskha*, *ChineseNewYear*, etc.
-- *Special+/-N* — offset from a special date (e.g., `Easter-2`)
+- *Special+/-N* — offset from a special date (e.g., `Easter-2`);
+  `N` is 1–3 digits (see offset limit above)
 
 ## Age Syntax
 
