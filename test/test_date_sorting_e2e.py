@@ -15,6 +15,7 @@ from pylendar.pylendar import (
     Event,
     FixedDate,
     get_matching_events,
+    get_moon_phases,
     main,
     replace_age_in_description,
 )
@@ -765,3 +766,18 @@ def test_year_boundary_relative_weekday(run_calendar):
         ahead=3,
     )
     assert result == ["Jan  2*\tRelative event across year boundary"]
+
+
+def test_year_boundary_new_moon(run_calendar):
+    """Built-in NewMoon in next-year January is found when today is Dec 31.
+
+    Regresses a bug where parse_special_dates only materialized built-in
+    special dates for today.year, so a Dec/Jan window missed any
+    moon-phase / equinox / Easter / etc. that fell in the adjacent year.
+    """
+    next_year = 2033
+    earliest_jan_new_moon = min(get_moon_phases(next_year)["newmoon"])
+    today = datetime.date(next_year - 1, 12, 31)
+    ahead = (earliest_jan_new_moon - today).days + 1
+    result = run_calendar("NewMoon\tNM event", today, ahead=ahead)
+    assert any("NM event" in line for line in result)

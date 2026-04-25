@@ -36,7 +36,7 @@ import os
 import re
 import sys
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Self, TypeAlias
@@ -414,7 +414,10 @@ def process_calendar(
         friday=opts.friday,
         expand_weekends=opts.expand_weekends,
     )
-    date_exprs = parse_special_dates(calendar_lines, today.year, opts.utc_offset_hours)
+    years_to_check = {d.year for d in dates_to_check}
+    date_exprs = parse_special_dates(
+        calendar_lines, years_to_check, opts.utc_offset_hours
+    )
     directives = extract_directives(calendar_lines)
     date_parser = DateStringParser(date_exprs, directives=directives)
 
@@ -1026,10 +1029,24 @@ def _builtin_date_exprs(year: int, utc_offset_hours: float = 0) -> dict[str, Dat
 
 
 def parse_special_dates(
-    calendar_lines: list[str], year: int, utc_offset_hours: float = 0
+    calendar_lines: list[str],
+    years: Iterable[int],
+    utc_offset_hours: float = 0,
 ) -> dict[str, DateExpr]:
-    """Parse special date definitions and aliases from the calendar file."""
-    date_exprs = _builtin_date_exprs(year, utc_offset_hours).copy()
+    """Parse special date definitions and aliases from the calendar file.
+
+    Built-ins are materialized for every year in ``years`` and unioned per
+    keyword, so callers should pass the year set spanned by the date
+    range under consideration.
+    """
+    merged: dict[str, frozenset[datetime.date]] = {}
+    for y in years:
+        for name, expr in _builtin_date_exprs(y, utc_offset_hours).items():
+            if isinstance(expr, ResolvedDate):
+                merged[name] = merged.get(name, frozenset()) | expr.dates
+    date_exprs: dict[str, DateExpr] = {
+        name: ResolvedDate(dates) for name, dates in merged.items()
+    }
 
     # Parse aliases from calendar file
     for line in calendar_lines:

@@ -229,7 +229,7 @@ def test_custom_ordinal_named_month(custom_parser: DateStringParser) -> None:
 
 def test_right_side_known_alias() -> None:
     """myfeast=Easter — right side known, left gets the value."""
-    date_exprs = parse_special_dates(["myfeast=Easter"], 2026)
+    date_exprs = parse_special_dates(["myfeast=Easter"], [2026])
     assert "myfeast" in date_exprs
     easter_dates = date_exprs["easter"].resolve(2026)
     assert date_exprs["myfeast"].resolve(2026) == easter_dates
@@ -237,7 +237,7 @@ def test_right_side_known_alias() -> None:
 
 def test_left_side_known_alias() -> None:
     """Easter=spring — left side known, right gets the value."""
-    date_exprs = parse_special_dates(["Easter=spring"], 2026)
+    date_exprs = parse_special_dates(["Easter=spring"], [2026])
     assert "spring" in date_exprs
     easter_dates = date_exprs["easter"].resolve(2026)
     assert date_exprs["spring"].resolve(2026) == easter_dates
@@ -251,7 +251,7 @@ def test_bogus_date_with_offset_returns_none() -> None:
 
 def test_special_date_with_four_digit_offset_returns_none() -> None:
     """Offsets with more than 3 digits are rejected during parsing."""
-    parser = DateStringParser(parse_special_dates([], 2026))
+    parser = DateStringParser(parse_special_dates([], [2026]))
     assert parser.parse("Easter+1000") is None
 
 
@@ -320,7 +320,7 @@ Oct 12\tFixed date
 
 def test_non_ascii_alias_with_offset() -> None:
     """Non-ASCII alias like Påsk=Easter resolves with +/- offsets."""
-    date_exprs = parse_special_dates(["Påsk=Easter"], 2026)
+    date_exprs = parse_special_dates(["Påsk=Easter"], [2026])
     parser = DateStringParser(date_exprs=date_exprs)
     result = parser.parse("Påsk-47")
     assert result is not None
@@ -330,7 +330,7 @@ def test_non_ascii_alias_with_offset() -> None:
 
 def test_casefold_alias_with_eszett() -> None:
     """Alias containing ß matches via casefold (ß→ss)."""
-    date_exprs = parse_special_dates(["Fassnacht=Easter"], 2026)
+    date_exprs = parse_special_dates(["Fassnacht=Easter"], [2026])
     parser = DateStringParser(date_exprs=date_exprs)
     # casefold turns both Faßnacht and Fassnacht into fassnacht
     result = parser.parse("Faßnacht-47")

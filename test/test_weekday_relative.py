@@ -14,7 +14,7 @@ from pylendar.pylendar import (
 @pytest.fixture
 def parser() -> DateStringParser:
     """Return a default DateStringParser."""
-    special = parse_special_dates([], 2026)
+    special = parse_special_dates([], [2026])
     return DateStringParser(special)
 
 
