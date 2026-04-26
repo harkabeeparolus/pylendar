@@ -240,7 +240,8 @@ class OffsetDateExpr(DateExpr):
     offset: int
 
     @property
-    def variable(self) -> bool:  # type: ignore[override]
+    # pylint: disable-next=line-too-long
+    def variable(self) -> bool:  # type: ignore[override]  # pyright: ignore[reportIncompatibleVariableOverride]
         """Delegate to the base expression."""
         return self.base.variable
 

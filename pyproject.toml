@@ -74,9 +74,6 @@ reportImplicitOverride = false              # 12+ DateExpr.resolve() overrides +
 reportAny = false                           # argparse returns Any; mypy strict allows this
 reportUnusedCallResult = false              # argparse add_argument() returns are unused
 reportImplicitStringConcatenation = false   # conflicts with ruff/black formatting
-# TODO: re-enable these two and use per-line # pyright: ignore comments instead
-reportIncompatibleVariableOverride = false  # OffsetDateExpr.variable property override
-reportArgumentType = false                  # calendar.different_locale() stdlib stub mismatch
 
 [tool.mypy]
 python_version = "3.11"
