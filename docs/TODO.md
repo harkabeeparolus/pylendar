@@ -1,28 +1,5 @@
 # TODO
 
-## Active
-
-### Redesign `OffsetDateExpr.variable` to drop type-ignore suppressions
-
-`OffsetDateExpr.variable` is a `@property` overriding a `ClassVar[bool]` on
-the `DateExpr` base class. This requires a `# type: ignore[override]` for
-mypy and a `# pyright: ignore[reportIncompatibleVariableOverride]` (or a
-module-wide silence) for basedpyright.
-
-Investigate whether the `variable` API can be redesigned so that delegation
-in `OffsetDateExpr` no longer triggers an incompatible-override diagnostic.
-Sketches:
-
-- Convert `variable` to a method (e.g. `is_variable()`) on all `DateExpr`
-  subclasses — uniform method override, no ClassVar/property conflict.
-- Set `variable` as a frozen instance attribute in `__post_init__` via
-  `object.__setattr__`, with a matching field declaration.
-- Make `variable` a `@property` on the base class too, so all overrides are
-  property-to-property.
-
-Tradeoff: invasive change to a load-bearing class hierarchy (~6 subclasses)
-for the benefit of removing two suppression comments.
-
 ## Completed feature notes
 
 These were previously tracked as future plans and are already implemented.

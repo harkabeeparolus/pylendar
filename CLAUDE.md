@@ -8,7 +8,7 @@ Pylendar is a Python port of the BSD `calendar(1)` utility. It parses calendar f
 
 ## Build and Development Commands
 
-Uses `uv` for package management, `ruff` + `pylint` for linting, and `mypy` (strict) + `ty` for type checking. Run pylint on both `src/` and `test/`. A `Justfile` is provided for convenience; run `just check` after every complete code change.
+Uses `uv` for package management, `ruff` + `pylint` for linting, and `mypy` (strict) + `ty` + `basedpyright` for type checking. Run pylint on both `src/` and `test/`. A `Justfile` is provided for convenience; run `just check` after every complete code change.
 
 ```bash
 uv sync                  # install to venv
@@ -27,7 +27,7 @@ There is test data from FreeBSD default calendar files in the `calendars/` subdi
 
 ## Architecture
 
-The codebase is intentionally a single file (`src/pylendar/pylendar.py`, ~1300 lines) so it could be used as a standalone script in the future, via PEP 723 inline script metadata. But during development we build it as a normal Python package.
+The codebase is intentionally a single file (`src/pylendar/pylendar.py`, ~1400 lines) so it could be used as a standalone script in the future, via PEP 723 inline script metadata. But during development we build it as a normal Python package.
 
 Three main components:
 
@@ -61,13 +61,14 @@ Tests are in `test/` directory:
 - `test_friday_weekend_flags.py` - -F (friday) and -W (weekend-ignore) flags
 - `test_longitude_utc.py` - UTC offset, longitude, and astronomical date flags
 - `test_parse_today.py` - -t flag date parsing (various formats)
+- `test_weekday_relative.py` - `Wkday<Date` / `Wkday>Date` weekday-relative-to-date syntax
 - `test_weekday_flag.py` - -w (weekday) flag output formatting
 
 Coverage is at 97% with branch coverage enabled. Untestable boilerplate (dependency `ImportError` guards, `KeyboardInterrupt` handler, `if __name__ == "__main__"`, and the `utcoffset() is None` fallback) is marked `# pragma: no cover`.
 
 ## Linting and Type Checking
 
-Ruff is configured with strict "ALL" rules. Pylint runs on both `src/` and `test/` directories. Both allow f-string interpolation in logging. Mypy runs in strict mode; ty is also used. Type stubs for `astronomy-engine` are in `typings/`.
+Ruff is configured with strict "ALL" rules. Pylint runs on both `src/` and `test/` directories. Both allow f-string interpolation in logging. Mypy runs in strict mode; ty and basedpyright (in `"all"` mode) also run. Type stubs for `astronomy-engine` are in `typings/`.
 
 ## Manpage
 

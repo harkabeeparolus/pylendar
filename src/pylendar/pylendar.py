@@ -233,17 +233,11 @@ class NthWeekdayEveryMonth(DateExpr):
 
 
 @dataclass(frozen=True)
-class OffsetDateExpr(DateExpr):
-    """A date expression offset by a number of days (e.g., Easter-2 for Good Friday)."""
+class OffsetDate(DateExpr):
+    """A computed date offset by a number of days (e.g., Easter-2 for Good Friday)."""
 
     base: DateExpr
     offset: int
-
-    @property
-    # pylint: disable-next=line-too-long
-    def variable(self) -> bool:  # type: ignore[override]  # pyright: ignore[reportIncompatibleVariableOverride]
-        """Delegate to the base expression."""
-        return self.base.variable
 
     def resolve(self, year: int) -> DateSet:
         """Return base dates shifted by offset days."""
@@ -575,7 +569,7 @@ class DateStringParser:
         if match := re.fullmatch(rf"({_LETTER}+)([+-])({_DELTA})", date_str):
             offset = _parse_signed_int(match, 2, 3)
             if base := self.date_exprs.get(match.group(1)):
-                return OffsetDateExpr(base, offset)
+                return OffsetDate(base, offset)
 
         # Plain special dates and aliases
         if date_expr := self.date_exprs.get(date_str):
@@ -619,7 +613,7 @@ class DateStringParser:
         n = self.ordinal_map[match.group(3)]
         base: DateExpr = NthWeekdayOfMonth(month, self.weekday_map[wkday_name], n)
         if match.group(4):
-            base = OffsetDateExpr(base, int(match.group(4)))
+            base = OffsetDate(base, int(match.group(4)))
         return base
 
     @staticmethod

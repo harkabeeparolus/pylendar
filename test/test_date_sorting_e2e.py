@@ -14,6 +14,8 @@ from pylendar.pylendar import (
     DateStringParser,
     Event,
     FixedDate,
+    OffsetDate,
+    ResolvedDate,
     get_matching_events,
     get_moon_phases,
     main,
@@ -744,6 +746,56 @@ def test_event_lt_non_event_returns_not_implemented() -> None:
 def test_fixed_date_feb_30_returns_empty() -> None:
     """Feb 30 doesn't exist, so resolve returns an empty set."""
     assert FixedDate(month=2, day=30).resolve(2026) == set()
+
+
+def test_offset_date_inherits_variable_true_regardless_of_base() -> None:
+    """OffsetDate.variable reads True even when constructed with a fixed base.
+
+    OffsetDate has no ``variable`` of its own; it inherits the True default
+    from DateExpr. This is correct only because the parser never wraps a
+    fixed base — see ``test_offset_date_only_wraps_variable_bases``.
+    """
+    assert OffsetDate(FixedDate(12, 25), 1).variable is True
+
+
+def test_offset_date_only_wraps_variable_bases() -> None:
+    """Pin the invariant that the parser wraps only variable bases in OffsetDate.
+
+    OffsetDate inherits ``variable=True`` from DateExpr, so the inherited
+    default is correct only as long as every parser path that builds an
+    OffsetDate feeds it a variable base. If a future grammar extension
+    introduces fixed-base offset syntax (e.g. ``12/25+1``), the result
+    must NOT be an OffsetDate — it would mismark the resulting date as
+    variable. That extension would need a separate fixed-aware wrapper.
+    """
+    parser = DateStringParser()
+    parser.date_exprs["easter"] = ResolvedDate.of(datetime.date(2026, 4, 5))
+
+    # Positive: representative inputs from each parser path that currently
+    # produces an OffsetDate. Each must wrap a variable base.
+    for date_str in ("easter+2", "10/MonSecond+1", "Oct/SatFourth-2"):
+        result = parser.parse(date_str)
+        assert isinstance(result, OffsetDate), (
+            f"{date_str!r} stopped parsing as OffsetDate"
+        )
+        assert result.base.variable is True, (
+            f"{date_str!r} now wraps a fixed base; OffsetDate.variable would "
+            f"mismark it as variable"
+        )
+
+    # Negative: fixed-base offset syntax must not produce an OffsetDate.
+    # Currently returns None (no grammar matches). If a future extension
+    # makes these parse, the result must still report variable=False.
+    for date_str in ("12/25+1", "Jul 4+1"):
+        result = parser.parse(date_str)
+        assert not isinstance(result, OffsetDate), (
+            f"{date_str!r} parsed as OffsetDate, which would mismark this "
+            f"fixed expression as variable"
+        )
+        if result is not None:
+            assert result.variable is False, (
+                f"{date_str!r} parsed but reported variable=True"
+            )
 
 
 def test_get_matching_events_unparseable_date_returns_empty() -> None:
