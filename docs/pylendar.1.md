@@ -276,10 +276,19 @@ following differences exist:
   (also matching macOS/FreeBSD). The default (no flag) matches all
   implementations.
 
-**No -a or -d options**
-: The **-a** flag (mail all users) is intentionally not implemented.
-  Email delivery is out of scope. The **-d** flag (debug date info)
-  is not implemented; use **-v** for verbose output instead.
+**No email delivery or root mode**
+: The **-a** flag (mail entries to all users) will not be implemented.
+  **pylendar** is designed to run as the current user only; it will not
+  run as root to monitor other user accounts, and it will not send
+  email.
+
+**No -b Cyrillic mode**
+: The **-b** flag and **BODUN=** variable (Cyrillic "Old New Year"
+  mode from OpenBSD and Debian) will not be implemented.
+
+**No -d option**
+: The **-d** flag (debug date info) is not implemented; use **-v**
+  for verbose output instead.
 
 **Age \[YYYY] syntax**
 : The `[YYYY]` age calculation in event descriptions is a pylendar
