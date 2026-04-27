@@ -59,7 +59,7 @@ except ImportError:  # pragma: no cover
 log = logging.getLogger("pylendar")
 
 
-__version__ = "0.6.1"
+__version__ = "0.7.0"
 
 XDG_CONFIG_HOME = Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config"))
 DEFAULT_CALENDAR_PATHS: list[Path] = [
