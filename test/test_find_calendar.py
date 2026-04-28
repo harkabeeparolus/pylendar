@@ -49,12 +49,12 @@ def test_calendar_dir_missing_falls_through(tmp_path, monkeypatch):
     assert result == (fallback / "calendar").resolve()
 
 
-def test_returns_default_when_nothing_found(
+def test_returns_none_when_nothing_found(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Falls back to Path('calendar') when no file exists."""
+    """Returns None when no calendar file exists in any searched directory."""
     monkeypatch.delenv("CALENDAR_DIR", raising=False)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path / "fakehome"))
     result = find_calendar([])
-    assert result == Path("calendar")
+    assert result is None

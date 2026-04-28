@@ -9,20 +9,10 @@
 # ]
 # ///
 
-"""A Python implementation of the BSD calendar(1) utility.
+"""An improved replacement for the BSD calendar utility, written in Python.
 
-Reads a text file with dated events and prints the events scheduled
-for today and upcoming days.  See ``pylendar(1)`` for full documentation.
-
-Usage:
-    pylendar [-f /path/to/calendar_file]
-
-Example calendar file (save as 'calendar'):
-01/01	New Year's Day
-Easter	Happy Easter!
-Jul 4	US Independence Day
-12/25	Christmas Day
-* 15	Pay the rent
+Reads a text file with dated events, and prints the events scheduled
+for today and upcoming days. See the manpage for full documentation.
 """
 
 import argparse
@@ -56,8 +46,29 @@ try:
 except ImportError:  # pragma: no cover
     sys.exit("Error: This script requires the 'lunardate' package.")
 
-log = logging.getLogger("pylendar")
+STARTER_CALENDAR = """\
+/* pylendar starter calendar. See `man pylendar` for the full date format
+ * reference. Lines below are TAB-separated: <date><TAB><description>. */
 
+/* Fixed dates */
+Jan 1\tNew Year's Day
+Jul 4\tUS Independence Day [1776]
+
+/* ISO 8601 (pylendar extension) */
+2028-07-14\tStart of the LA Olympics
+
+/* Recurring: the 15th of every month */
+* 15\tMid-month reminder
+
+/* Weekday-of-month: 2nd Monday in May */
+May/MonSecond\t2nd Monday in May
+
+/* Astronomical specials */
+Easter\tEaster Sunday
+DecSolstice\tWinter solstice
+"""
+
+log = logging.getLogger("pylendar")
 
 __version__ = "0.7.0"
 
@@ -291,8 +302,10 @@ class WeekdayRelativeToDate(DateExpr):
 
 
 def _display_path(path: Path) -> str:
-    """Format a path as parent/name for log messages."""
-    return str(Path(path.parent.name) / path.name)
+    """Format a path for log messages, using ~ for paths under the home directory."""
+    if path.is_relative_to(Path.home()):
+        return f"~/{path.relative_to(Path.home())}"
+    return str(path)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -337,11 +350,12 @@ def cli(argv: list[str] | None = None) -> None:
         print_diagnostic(args.D, today.year, utc_offset, longitude)
         return
 
-    calendar_path = (
-        Path(args.file) if args.file else find_calendar(DEFAULT_CALENDAR_PATHS)
-    )
-    if not calendar_path.is_file():
-        log.warning(f"Calendar file not found: {calendar_path}")
+    if args.init:
+        run_init()
+        return
+
+    calendar_path = resolve_calendar_path(args.file)
+    if calendar_path is None:
         return
 
     friday = bsd_to_python_weekday(args.F)
@@ -1235,12 +1249,18 @@ def positive_int(value: str) -> int:
 def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser for the calendar utility."""
     parser = argparse.ArgumentParser(
-        description="A Python replacement for the BSD calendar utility.",
+        description=__doc__,
+    )
+    parser.add_argument(
+        "--init",
+        action="store_true",
+        help="Create a starter calendar file at ~/.calendar/calendar and exit. "
+        "Will not overwrite an existing file.",
     )
     parser.add_argument(
         "-f",
-        "--file",
-        help="Path to the calendar file (default: 'calendar' in the current directory)",
+        dest="file",
+        help="Path to the calendar file. Overrides the default search path.",
     )
     ahead_group = parser.add_mutually_exclusive_group()
     ahead_group.add_argument(
@@ -1379,7 +1399,7 @@ def get_matching_events(
     ]
 
 
-def find_calendar(look_in: Sequence[Path]) -> Path:
+def find_calendar(look_in: Sequence[Path]) -> Path | None:
     """Find the calendar file in standard locations."""
     calendar_dir = os.environ.get("CALENDAR_DIR")
     first = Path(calendar_dir) if calendar_dir else Path.cwd()
@@ -1389,8 +1409,43 @@ def find_calendar(look_in: Sequence[Path]) -> Path:
         file = dir_path / "calendar"
         if file.is_file():
             return file.resolve()
-    log.warning("No calendar file found in search path")
-    return Path("calendar")
+    return None
+
+
+def write_starter_calendar(target: Path) -> bool:
+    """Write a starter calendar to *target*. Returns False if it already exists."""
+    if target.exists():
+        return False
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(STARTER_CALENDAR, encoding="utf-8")
+    return True
+
+
+def run_init() -> None:
+    """Handle the ``--init`` flag: write a starter calendar to ~/.calendar/calendar."""
+    target = Path.home() / ".calendar" / "calendar"
+    if write_starter_calendar(target):
+        print(f"pylendar: starter calendar written to {target}")
+    else:
+        print(f"pylendar: not overwriting existing file at {target}")
+
+
+def resolve_calendar_path(file_arg: str | None) -> Path | None:
+    """Resolve the calendar file path, warning and returning None on failure."""
+    if file_arg:
+        path = Path(file_arg)
+        if not path.is_file():
+            log.warning(f"Calendar file not found: {path}")
+            return None
+        return path
+    found = find_calendar(DEFAULT_CALENDAR_PATHS)
+    if found is None:
+        home_target = Path.home() / ".calendar" / "calendar"
+        log.warning(
+            f"No calendar file found. Run 'pylendar --init' to create one "
+            f"at {home_target}, or pass -f PATH."
+        )
+    return found
 
 
 if __name__ == "__main__":  # pragma: no cover

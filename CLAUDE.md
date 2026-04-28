@@ -59,6 +59,7 @@ Tests are in `test/` directory:
 - `test_directives.py` - LANG= and SEQUENCE= directive parsing, special-date aliases, DateStringParser edge cases
 - `test_find_calendar.py` - Calendar file discovery, CALENDAR_DIR support, and fallback paths
 - `test_friday_weekend_flags.py` - -F (friday) and -W (weekend-ignore) flags
+- `test_init.py` - --init starter-calendar generation and the no-calendar warning
 - `test_longitude_utc.py` - UTC offset, longitude, and astronomical date flags
 - `test_parse_today.py` - -t flag date parsing (various formats)
 - `test_weekday_relative.py` - `Wkday<Date` / `Wkday>Date` weekday-relative-to-date syntax

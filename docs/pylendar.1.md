@@ -56,6 +56,11 @@ The following options are available:
   begins). Day numbering follows BSD **tm_wday** convention: 0=Sun,
   1=Mon, ..., 5=Fri, 6=Sat. Default is 5.
 
+**--init**
+: Create a starter calendar file at *~/.calendar/calendar* and exit. Will
+  not overwrite an existing file. Useful for first-time setup; the file
+  contains commented examples of the supported date formats.
+
 **-f** *calendarfile*
 : Use *calendarfile* as the default calendar file.
 
@@ -252,6 +257,9 @@ The default search order when looking for a calendar file is: current
 directory, ~/.calendar, $XDG_CONFIG_HOME/calendar, /etc/calendar,
 /usr/share/calendar, /usr/local/share/calendar. The **-f** option or the
 **CALENDAR_DIR** environment variable override this search.
+
+If no calendar file is found in any of these locations, run **pylendar
+--init** to create a starter file at *~/.calendar/calendar*.
 
 # ENVIRONMENT
 
