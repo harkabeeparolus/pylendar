@@ -130,6 +130,10 @@ The following special date names are recognized:
 These names may be reassigned to their local names via an assignment
 like `Easter=Pasen` in the calendar file.
 
+Special date aliases may also be introduced with either name on either
+side of the `=`. For example, both `Easter=Pasen` and `Pasen=Easter`
+make `Pasen` available as an alias for `Easter`.
+
 The names of the recognized special dates may be followed by a positive
 or negative integer offset, like: `Easter+3` or `Paskha-4`.
 

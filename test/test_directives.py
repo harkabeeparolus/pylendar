@@ -243,6 +243,64 @@ def test_left_side_known_alias() -> None:
     assert date_exprs["spring"].resolve(2026) == easter_dates
 
 
+def test_conflicting_builtin_alias_warns_and_keeps_originals(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Conflicting known roots warn instead of rebinding a built-in name."""
+    catholic_easter = dateutil.easter.easter(2026)
+    orthodox_easter = dateutil.easter.easter(
+        2026, method=dateutil.easter.EASTER_ORTHODOX
+    )
+
+    with caplog.at_level(logging.WARNING, logger="pylendar"):
+        date_exprs = parse_special_dates(["Easter=Paskha"], [2026])
+
+    assert "Conflicting special-date alias ignored" in caplog.text
+    assert date_exprs["easter"].resolve(2026) == {catholic_easter}
+    assert date_exprs["paskha"].resolve(2026) == {orthodox_easter}
+
+
+def test_alias_chain_resolves_when_root_appears_later() -> None:
+    """Forward alias chains resolve once a known root appears later."""
+    date_exprs = parse_special_dates(["spring=pasen", "Easter=pasen"], [2026])
+    easter_dates = date_exprs["easter"].resolve(2026)
+    assert date_exprs["pasen"].resolve(2026) == easter_dates
+    assert date_exprs["spring"].resolve(2026) == easter_dates
+
+
+def test_alias_chain_resolves_regardless_of_order() -> None:
+    """Alias chains resolve the same way when the root comes first."""
+    date_exprs = parse_special_dates(["Easter=pasen", "spring=pasen"], [2026])
+    easter_dates = date_exprs["easter"].resolve(2026)
+    assert date_exprs["pasen"].resolve(2026) == easter_dates
+    assert date_exprs["spring"].resolve(2026) == easter_dates
+
+
+def test_unresolved_alias_chain_warns_and_is_ignored(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Aliases with no path to a known root warn and are ignored."""
+    with caplog.at_level(logging.WARNING, logger="pylendar"):
+        date_exprs = parse_special_dates(["foo=bar", "bar=baz"], [2026])
+
+    assert "Unresolved special-date alias ignored" in caplog.text
+    assert "foo" not in date_exprs
+    assert "bar" not in date_exprs
+    assert "baz" not in date_exprs
+
+
+def test_alias_cycle_on_same_root_is_noop(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A back-reference to an existing alias is a no-op, not a conflict."""
+    with caplog.at_level(logging.WARNING, logger="pylendar"):
+        date_exprs = parse_special_dates(["myfeast=Easter", "Easter=myfeast"], [2026])
+
+    assert caplog.text == ""
+    easter_dates = date_exprs["easter"].resolve(2026)
+    assert date_exprs["myfeast"].resolve(2026) == easter_dates
+
+
 def test_bogus_date_with_offset_returns_none() -> None:
     """bogusdate+3 is not in date_exprs, so parse returns None."""
     parser = DateStringParser()

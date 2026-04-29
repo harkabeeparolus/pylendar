@@ -1070,6 +1070,64 @@ def _builtin_date_exprs(year: int, utc_offset_hours: float = 0) -> dict[str, Dat
     return date_exprs
 
 
+def _resolve_special_date_aliases(
+    calendar_lines: list[str], date_exprs: dict[str, DateExpr]
+) -> None:
+    """Resolve special-date aliases from assignment lines.
+
+    Mutates ``date_exprs`` in place and returns ``None``.
+
+    Alias resolution uses a fixed-point walk so forward references and short
+    chains work regardless of line order. Conflicts and aliases with no path to
+    a known special date are warned and ignored.
+    """
+    pending: list[tuple[str, str]] = []
+    for line in calendar_lines:
+        if "\t" in line or "=" not in line:
+            continue
+        left_raw, right_raw = line.split("=", 1)
+        if left_raw.strip() in {"LANG", "SEQUENCE"}:
+            continue
+        left = left_raw.strip().casefold()
+        right = right_raw.strip().casefold()
+        if left and right:
+            pending.append((left, right))
+
+    while pending:
+        progress = False
+        next_pending: list[tuple[str, str]] = []
+
+        for left, right in pending:
+            left_expr = date_exprs.get(left)
+            right_expr = date_exprs.get(right)
+
+            if left_expr is not None and right_expr is not None:
+                if left_expr is not right_expr:
+                    log.warning(f"Conflicting special-date alias ignored: {left}={right}")
+                continue
+
+            if left_expr is not None:
+                date_exprs[right] = left_expr
+                log.debug(f"Date alias: {left} = {right}")
+                progress = True
+                continue
+
+            if right_expr is not None:
+                date_exprs[left] = right_expr
+                log.debug(f"Date alias: {left} = {right}")
+                progress = True
+                continue
+
+            next_pending.append((left, right))
+
+        if not progress:
+            for left, right in next_pending:
+                log.warning(f"Unresolved special-date alias ignored: {left}={right}")
+            return
+
+        pending = next_pending
+
+
 def parse_special_dates(
     calendar_lines: list[str],
     years: Iterable[int],
@@ -1090,19 +1148,7 @@ def parse_special_dates(
         name: ResolvedDate(dates) for name, dates in merged.items()
     }
 
-    # Parse aliases from calendar file
-    for line in calendar_lines:
-        if "=" in line and "\t" not in line:
-            left, right = line.split("=", 1)
-            left = left.strip().casefold()
-            right = right.strip().casefold()
-            # If either side is a known date expr, add the alias
-            if left in date_exprs and right not in date_exprs:
-                date_exprs[right] = date_exprs[left]
-                log.debug(f"Date alias: {left} = {right}")
-            elif right in date_exprs:
-                date_exprs[left] = date_exprs[right]
-                log.debug(f"Date alias: {left} = {right}")
+    _resolve_special_date_aliases(calendar_lines, date_exprs)
 
     return date_exprs
 
