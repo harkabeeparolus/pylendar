@@ -499,13 +499,34 @@ def _parse_signed_int(match: re.Match[str], sign_group: int, value_group: int) -
     return sign * int(match.group(value_group))
 
 
-class DateStringParser:
-    """Parser for date strings from calendar files."""
+class DateStringParser:  # pylint: disable=too-many-instance-attributes
+    """Parser for date strings from calendar files.
+
+    Note: This class is not thread-safe. During initialization, it uses
+    ``calendar.different_locale()`` which temporarily mutates the global C-level
+    locale state. If used as a library in a multi-threaded application,
+    instantiating this class concurrently with other locale-dependent
+    operations may cause race conditions.
+    """
 
     month_map: dict[str, int]
     weekday_map: dict[str, int]
     ordinal_map: dict[str, int]
     ordinals_re: str
+
+    _re_special_offset: re.Pattern[str]
+    _re_full_date: re.Pattern[str]
+    _re_slash_dd: re.Pattern[str]
+    _re_mm_wkday_offset: re.Pattern[str]
+    _re_month_wkday_offset: re.Pattern[str]
+    _re_month_day_1: re.Pattern[str]
+    _re_month_day_2: re.Pattern[str]
+    _re_wildcard_wkday: re.Pattern[str]
+    _re_wildcard_day: re.Pattern[str]
+    _re_month_wildcard: re.Pattern[str]
+    _re_mm_ord: re.Pattern[str]
+    _re_month_ord_1: re.Pattern[str]
+    _re_month_ord_2: re.Pattern[str]
 
     def __init__(
         self,
@@ -546,6 +567,25 @@ class DateStringParser:
             log.info(f"Custom ordinal sequence: {dirs.sequence}")
         self.ordinals_re = "|".join(self.ordinal_map)
 
+        # Precompile regexes used in parsing
+        self._re_special_offset = re.compile(rf"({_LETTER}+)([+-])({_DELTA})")
+        self._re_full_date = re.compile(r"(\d{4})[/-](\d{1,2})[/-](\d{1,2})")
+        self._re_slash_dd = re.compile(rf"({_NN}|{_LETTER}+)/({_NN})")
+        self._re_mm_wkday_offset = re.compile(rf"({_NN})/({_LETTER}+)([+-])({_DELTA})")
+        self._re_month_wkday_offset = re.compile(
+            rf"({_LETTER}+)\s+({_LETTER}+)([+-])({_DELTA})"
+        )
+        self._re_month_day_1 = re.compile(rf"({_LETTER}+)\s+({_NN})")
+        self._re_month_day_2 = re.compile(rf"({_NN})\s+({_LETTER}+)")
+        self._re_wildcard_wkday = re.compile(rf"\*\s+({_LETTER}+)([+-])({_DELTA})")
+        self._re_wildcard_day = re.compile(r"\*\s*(\d{1,2})|(\d{1,2})\s+\*")
+        self._re_month_wildcard = re.compile(rf"({_LETTER}+)\s*\*")
+
+        ltr, ords = _LETTER, self.ordinals_re
+        self._re_mm_ord = re.compile(rf"({_NN})/({ltr}+)({ords})([+-]{_DELTA})?")
+        self._re_month_ord_1 = re.compile(rf"({ltr}+)/({ltr}+)({ords})([+-]{_DELTA})?")
+        self._re_month_ord_2 = re.compile(rf"({_LETTER}+)({ords})\s+({_LETTER}+)")
+
     @staticmethod
     def build_month_map() -> dict[str, int]:
         """Build a locale-aware map of month names/abbreviations to numbers."""
@@ -580,7 +620,7 @@ class DateStringParser:
 
         # Special date with offset (e.g., Easter-2, FullMoon+1)
         # Must precede plain special-date lookup
-        if match := re.fullmatch(rf"({_LETTER}+)([+-])({_DELTA})", date_str):
+        if match := self._re_special_offset.fullmatch(date_str):
             offset = _parse_signed_int(match, 2, 3)
             if base := self.date_exprs.get(match.group(1)):
                 return OffsetDate(base, offset)
@@ -607,14 +647,10 @@ class DateStringParser:
 
     def _parse_ordinal_weekday(self, date_str: str) -> DateExpr | None:
         """Parse BSD ordinal weekday formats (e.g., 10/MonSecond, Oct/SatFourth-2)."""
-        ltr, ords = _LETTER, self.ordinals_re
-
-        if match := re.fullmatch(rf"({_NN})/({ltr}+)({ords})([+-]{_DELTA})?", date_str):
+        if match := self._re_mm_ord.fullmatch(date_str):
             # MM/WkdayOrdinal with optional offset (e.g., 10/monsecond, 01/monthird)
             month = int(match.group(1))
-        elif match := re.fullmatch(
-            rf"({ltr}+)/({ltr}+)({ords})([+-]{_DELTA})?", date_str
-        ):
+        elif match := self._re_month_ord_1.fullmatch(date_str):
             # Month/WkdayOrdinal with optional offset (e.g., oct/satfourth-2)
             if (month_name := match.group(1)) not in self.month_map:
                 return None
@@ -630,10 +666,9 @@ class DateStringParser:
             base = OffsetDate(base, int(match.group(4)))
         return base
 
-    @staticmethod
-    def _parse_full_date(date_str: str) -> DateExpr | None:
+    def _parse_full_date(self, date_str: str) -> DateExpr | None:
         """Parse YYYY/M/D or YYYY-MM-DD format (e.g., 2026/2/17, 2026-02-17)."""
-        if match := re.fullmatch(r"(\d{4})[/-](\d{1,2})[/-](\d{1,2})", date_str):
+        if match := self._re_full_date.fullmatch(date_str):
             return FixedDate(
                 month=int(match.group(2)),
                 day=int(match.group(3)),
@@ -643,7 +678,7 @@ class DateStringParser:
 
     def _parse_slash_dd(self, date_str: str) -> DateExpr | None:
         """Parse MM/DD or Month/DD format (e.g., 07/21, apr/17)."""
-        if match := re.fullmatch(rf"({_NN}|{_LETTER}+)/({_NN})", date_str):
+        if match := self._re_slash_dd.fullmatch(date_str):
             g1 = match.group(1)
             month = int(g1) if g1.isdigit() else self.month_map.get(g1)
             if month is not None:
@@ -652,7 +687,7 @@ class DateStringParser:
 
     def _parse_mm_wkday_offset(self, date_str: str) -> DateExpr | None:
         """Parse MM/Weekday+/-N format (e.g., 03/Sun-1, 11/Wed+3, 12/Sun+1)."""
-        if match := re.fullmatch(rf"({_NN})/({_LETTER}+)([+-])({_DELTA})", date_str):
+        if match := self._re_mm_wkday_offset.fullmatch(date_str):
             month = int(match.group(1))
             wkday_name = match.group(2)
             if wkday_name in self.weekday_map:
@@ -662,9 +697,7 @@ class DateStringParser:
 
     def _parse_month_wkday_offset(self, date_str: str) -> DateExpr | None:
         """Parse Month Weekday+/-N format (e.g., May Sun+2, Nov Thu+4, May Mon-1)."""
-        if match := re.fullmatch(
-            rf"({_LETTER}+)\s+({_LETTER}+)([+-])({_DELTA})", date_str
-        ):
+        if match := self._re_month_wkday_offset.fullmatch(date_str):
             month_name, wkday_name = match.group(1), match.group(2)
             n = _parse_signed_int(match, 3, 4)
             if month_name in self.month_map and wkday_name in self.weekday_map:
@@ -677,9 +710,9 @@ class DateStringParser:
 
     def _parse_month_day(self, date_str: str) -> DateExpr | None:
         """Parse Month DD or DD Month format (e.g., July 9, 01 Jan)."""
-        if match := re.fullmatch(rf"({_LETTER}+)\s+({_NN})", date_str):
+        if match := self._re_month_day_1.fullmatch(date_str):
             month_name, day = match.group(1), int(match.group(2))
-        elif match := re.fullmatch(rf"({_NN})\s+({_LETTER}+)", date_str):
+        elif match := self._re_month_day_2.fullmatch(date_str):
             month_name, day = match.group(2), int(match.group(1))
         else:
             return None
@@ -689,23 +722,22 @@ class DateStringParser:
 
     def _parse_wildcard_wkday(self, date_str: str) -> DateExpr | None:
         """Parse * Weekday+/-N format (e.g., * Fri+3)."""
-        if match := re.fullmatch(rf"\*\s+({_LETTER}+)([+-])({_DELTA})", date_str):
+        if match := self._re_wildcard_wkday.fullmatch(date_str):
             wkday_name = match.group(1)
             n = _parse_signed_int(match, 2, 3)
             if wkday_name in self.weekday_map:
                 return NthWeekdayEveryMonth(self.weekday_map[wkday_name], n)
         return None
 
-    @staticmethod
-    def _parse_wildcard_day(date_str: str) -> DateExpr | None:
+    def _parse_wildcard_day(self, date_str: str) -> DateExpr | None:
         """Parse * DD, *DD, or DD * format (e.g., * 9, *15, 15 *)."""
-        if match := re.fullmatch(r"\*\s*(\d{1,2})|(\d{1,2})\s+\*", date_str):
+        if match := self._re_wildcard_day.fullmatch(date_str):
             return WildcardDay(int(match.group(1) or match.group(2)))
         return None
 
     def _parse_month_wildcard(self, date_str: str) -> DateExpr | None:
         """Parse Month* or Month * format (every day of that month, e.g., June*)."""
-        if match := re.fullmatch(rf"({_LETTER}+)\s*\*", date_str):
+        if match := self._re_month_wildcard.fullmatch(date_str):
             month_name = match.group(1)
             if month_name in self.month_map:
                 return EveryDayOfMonth(self.month_map[month_name])
@@ -713,8 +745,7 @@ class DateStringParser:
 
     def _parse_wkday_ord_month(self, date_str: str) -> DateExpr | None:
         """Parse WkdayOrd Month format (e.g., SunFirst Aug, SunThird Jul)."""
-        ordinals = self.ordinals_re
-        if match := re.fullmatch(rf"({_LETTER}+)({ordinals})\s+({_LETTER}+)", date_str):
+        if match := self._re_month_ord_2.fullmatch(date_str):
             wkday_name = match.group(1)
             month_name = match.group(3)
             if wkday_name in self.weekday_map and month_name in self.month_map:
@@ -795,6 +826,8 @@ class DateStringParser:
 def remove_comments(code: str) -> str:
     """Remove C-style block and line comments (does not handle nesting or strings)."""
     code = re.sub(r"/\*.*?\*/", "", code, flags=re.DOTALL)  # Remove block comments
+    # TODO(anyone): Regex truncates URLs like https://example.com  # noqa: FIX002
+    # because it treats the "//" as a line comment.
     return re.sub(r"(?:^|\s)//.*", "", code)  # Remove line comments
 
 
@@ -1079,6 +1112,12 @@ def extract_directives(calendar_lines: list[str]) -> CalendarDirectives:
 
     Directives are lines without tabs whose left-hand side is ``LANG`` or
     ``SEQUENCE`` (case-sensitive).  Last occurrence wins.
+
+    Note: Unlike BSD calendar which evaluates LANG= and SEQUENCE= sequentially
+    per-file or per-block, pylendar evaluates them globally for the entire
+    merged input after SimpleCPP preprocessing. The last occurrence wins and
+    applies everywhere. This is an intentional simplification, as most modern
+    files use standard UTF-8 throughout.
     """
     lang: str | None = None
     sequence: tuple[str, ...] | None = None

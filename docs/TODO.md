@@ -1,5 +1,14 @@
 # TODO
 
+## Architecture Improvements
+
+### DateExpr: Set Generation vs. Predicate Interface
+
+Currently, `DateExpr.resolve(year)` generates all possible dates matching an expression for a given year (returning a `set[date]`). For wildcard types (like "every day"), this generates up to 366 dates per line. These sets are then intersected with `dates_to_check` (which is typically just 1-3 days depending on `-A` and `-B` flags).
+
+**Proposed Design:**
+Refactor `DateExpr` to have a `matches(date: datetime.date) -> bool` interface instead. Checking the 1-3 target days against the rule, rather than generating the whole year's permutations to do a set intersection, changes this from an $O(\text{DaysInYear})$ operation per line to an $O(\text{DatesToCheck})$ operation. This is architecturally cleaner and performant.
+
 ## Completed feature notes
 
 These were previously tracked as future plans and are already implemented.

@@ -309,6 +309,12 @@ following differences exist:
   comments. Other preprocessor directives are silently ignored.
   Once-only inclusion eliminates the need for include guards.
 
+**Global directives**
+: The **LANG=** and **SEQUENCE=** directives are evaluated globally
+  across all included files, and the last occurrence wins.
+  This is an intentional simplification compared to BSD calendar,
+  where they are evaluated sequentially per block or file.
+
 **astronomy-engine for precise calculations**
 : Lunar and solar calculations use the **astronomy-engine** library
   for precise results, rather than the BSD approximation formulas.
