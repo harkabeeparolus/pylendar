@@ -826,8 +826,6 @@ class DateStringParser:  # pylint: disable=too-many-instance-attributes
 def remove_comments(code: str) -> str:
     """Remove C-style block and line comments (does not handle nesting or strings)."""
     code = re.sub(r"/\*.*?\*/", "", code, flags=re.DOTALL)  # Remove block comments
-    # TODO(anyone): Regex truncates URLs like https://example.com  # noqa: FIX002
-    # because it treats the "//" as a line comment.
     return re.sub(r"(?:^|\s)//.*", "", code)  # Remove line comments
 
 
@@ -1070,6 +1068,22 @@ def _builtin_date_exprs(year: int, utc_offset_hours: float = 0) -> dict[str, Dat
     return date_exprs
 
 
+def _collect_alias_pairs(calendar_lines: list[str]) -> list[tuple[str, str]]:
+    """Extract (left, right) alias assignment pairs from calendar lines."""
+    pairs: list[tuple[str, str]] = []
+    for line in calendar_lines:
+        if "\t" in line or "=" not in line:
+            continue
+        left_raw, right_raw = line.split("=", 1)
+        if left_raw.strip() in {"LANG", "SEQUENCE"}:
+            continue
+        left = left_raw.strip().casefold()
+        right = right_raw.strip().casefold()
+        if left and right:
+            pairs.append((left, right))
+    return pairs
+
+
 def _resolve_special_date_aliases(
     calendar_lines: list[str], date_exprs: dict[str, DateExpr]
 ) -> None:
@@ -1081,17 +1095,7 @@ def _resolve_special_date_aliases(
     chains work regardless of line order. Conflicts and aliases with no path to
     a known special date are warned and ignored.
     """
-    pending: list[tuple[str, str]] = []
-    for line in calendar_lines:
-        if "\t" in line or "=" not in line:
-            continue
-        left_raw, right_raw = line.split("=", 1)
-        if left_raw.strip() in {"LANG", "SEQUENCE"}:
-            continue
-        left = left_raw.strip().casefold()
-        right = right_raw.strip().casefold()
-        if left and right:
-            pending.append((left, right))
+    pending = _collect_alias_pairs(calendar_lines)
 
     while pending:
         progress = False
@@ -1103,7 +1107,9 @@ def _resolve_special_date_aliases(
 
             if left_expr is not None and right_expr is not None:
                 if left_expr is not right_expr:
-                    log.warning(f"Conflicting special-date alias ignored: {left}={right}")
+                    log.warning(
+                        f"Conflicting special-date alias ignored: {left}={right}"
+                    )
                 continue
 
             if left_expr is not None:
