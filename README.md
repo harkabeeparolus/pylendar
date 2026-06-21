@@ -99,7 +99,7 @@ date-format reference.
 
 ## Documentation
 
-The manpage (`docs/pylendar.1.md`) is the authoritative reference for every
+The [manpage](docs/pylendar.1.md) is the authoritative reference for every
 supported date format, command-line option, file-search path, and BSD
 compatibility note.
 
