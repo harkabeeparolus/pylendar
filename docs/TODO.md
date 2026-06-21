@@ -1,19 +1,20 @@
 # TODO
 
-## Architecture Improvements
-
-### DateExpr: Set Generation vs. Predicate Interface
-
-Currently, `DateExpr.resolve(year)` generates all possible dates matching an expression for a given year (returning a `set[date]`). For wildcard types (like "every day"), this generates up to 366 dates per line. These sets are then intersected with `dates_to_check` (which is typically just 1-3 days depending on `-A` and `-B` flags).
-
-**Proposed Design:**
-Refactor `DateExpr` to have a `matches(date: datetime.date) -> bool` interface instead. Checking the 1-3 target days against the rule, rather than generating the whole year's permutations to do a set intersection, changes this from an $O(\text{DaysInYear})$ operation per line to an $O(\text{DatesToCheck})$ operation. This is architecturally cleaner and performant.
-
 ## Completed feature notes
 
 These were previously tracked as future plans and are already implemented.
 See [manpage_comparison.md](manpage_comparison.md) for the broader BSD
 calendar(1) comparison context.
+
+## ~~DateExpr: set generation vs. predicate interface~~ (done)
+
+Implemented in a45633f: `DateExpr.matches(date) -> bool` is now the
+membership predicate the event-collection hot path uses, replacing the
+per-line whole-year `resolve(year)` set intersection (up to 366 dates per
+line) with an $O(\text{DatesToCheck})$ check against the 1-3 target days.
+`resolve(year)` is kept for the `-t`/`resolve_today` enumeration path,
+which has no candidate date in hand; a consistency test guards against
+`matches`/`resolve` drift.
 
 ## ~~NetBSD wildcard extensions~~ (done)
 
