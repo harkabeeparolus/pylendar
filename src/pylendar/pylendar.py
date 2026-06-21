@@ -96,7 +96,7 @@ _DELTA = r"\d{1,3}"  # max ±999 days; 4+ digits look like a year
 DateSet: TypeAlias = set[datetime.date]
 
 
-class DateExpr(ABC):  # pylint: disable=too-few-public-methods
+class DateExpr(ABC):
     """A date expression that resolves to concrete dates for a given year."""
 
     variable: ClassVar[bool] = True
@@ -109,6 +109,16 @@ class DateExpr(ABC):  # pylint: disable=too-few-public-methods
     @abstractmethod
     def resolve(self, year: int) -> DateSet:
         """Return the set of dates this expression matches in the given year."""
+
+    def matches(self, date: datetime.date) -> bool:
+        """Return whether this expression falls on the given date.
+
+        The default derives the answer from ``resolve``; it is correct for
+        every expression whose dates stay within their seed year. Expressions
+        that can cross a year boundary (see ``OffsetDate`` and
+        ``WeekdayRelativeToDate``) override this.
+        """
+        return date in self.resolve(date.year)
 
 
 @dataclass(frozen=True)
@@ -255,6 +265,10 @@ class OffsetDate(DateExpr):
         delta = datetime.timedelta(days=self.offset)
         return {d + delta for d in self.base.resolve(year)}
 
+    def matches(self, date: datetime.date) -> bool:
+        """Test by shifting the candidate back onto the base expression."""
+        return self.base.matches(date - datetime.timedelta(days=self.offset))
+
 
 @dataclass(frozen=True)
 class EveryWeekday(DateExpr):
@@ -299,6 +313,22 @@ class WeekdayRelativeToDate(DateExpr):
             return set()
         diff = (self.direction * (self.weekday - anchor.weekday())) % 7 or 7
         return {anchor + datetime.timedelta(days=diff * self.direction)}
+
+    def matches(self, date: datetime.date) -> bool:
+        """Test by inverting the search to the candidate anchors.
+
+        A date matches if one of its candidate anchors (1..7 days against the
+        direction, minus the anchor offset) lands on the fixed month/day. This
+        is year-boundary-safe for any anchor offset.
+        """
+        if date.weekday() != self.weekday:
+            return False
+        for k in range(1, 8):
+            shift = k * self.direction + self.anchor_offset
+            base = date - datetime.timedelta(days=shift)
+            if (base.month, base.day) == (self.month, self.day):
+                return True
+        return False
 
 
 def _display_path(path: Path) -> str:
@@ -1476,12 +1506,7 @@ def get_matching_events(
         log.debug(f"Unparseable date expression: {date_str!r}")
         return []
 
-    years = {d.year for d in dates_to_check}
-    # Check adjacent years to catch expressions that shift across year boundaries
-    # (e.g., Sun>Dec 25+7 anchored in year Y but resolving to year Y+1).
-    check_years = {y for base_y in years for y in (base_y - 1, base_y, base_y + 1)}
-    resolved = {d for y in check_years for d in expr.resolve(y)}
-    matching = resolved & dates_to_check
+    matching = {d for d in dates_to_check if expr.matches(d)}
 
     variable = explicit_variable or expr.variable
     return [

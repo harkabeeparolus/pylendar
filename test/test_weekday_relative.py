@@ -6,7 +6,16 @@ import pytest
 
 from pylendar.pylendar import (
     DateStringParser,
+    EveryDay,
+    EveryDayOfMonth,
+    EveryWeekday,
+    FixedDate,
+    NthWeekdayEveryMonth,
+    NthWeekdayOfMonth,
+    OffsetDate,
+    ResolvedDate,
     WeekdayRelativeToDate,
+    WildcardDay,
     parse_special_dates,
 )
 
@@ -191,3 +200,88 @@ def test_parse_spaces_around_operator(parser: DateStringParser) -> None:
     expr = parser.parse("Sat > Jun 19")
     assert expr is not None
     assert expr.resolve(2026) == {datetime.date(2026, 6, 20)}
+
+
+# --- WeekdayRelativeToDate.matches() ---
+
+
+def test_matches_true_for_resolved_date() -> None:
+    """The date resolve() produces is matched."""
+    expr = WeekdayRelativeToDate(month=6, day=19, weekday=5, direction=1)
+    assert expr.matches(datetime.date(2026, 6, 20)) is True
+
+
+def test_matches_false_same_weekday_wrong_date() -> None:
+    """A later occurrence of the right weekday is not the nearest one."""
+    expr = WeekdayRelativeToDate(month=6, day=19, weekday=5, direction=1)
+    # Jun 27, 2026 is also a Saturday, but Jun 20 is the one after Jun 19.
+    assert expr.matches(datetime.date(2026, 6, 27)) is False
+
+
+def test_matches_false_wrong_weekday() -> None:
+    """A date on the wrong weekday never matches."""
+    expr = WeekdayRelativeToDate(month=6, day=19, weekday=5, direction=1)
+    assert expr.matches(datetime.date(2026, 6, 21)) is False  # Sunday
+
+
+def test_matches_across_year_boundary() -> None:
+    """Sat>Dec 31 anchored in 2026 resolves into Jan 2027; matches sees it."""
+    expr = WeekdayRelativeToDate(month=12, day=31, weekday=5, direction=1)
+    (target,) = expr.resolve(2026)
+    assert target.year == 2027  # the default `d in resolve(d.year)` would miss it
+    assert expr.matches(target) is True
+
+
+def test_matches_invalid_anchor_never_matches() -> None:
+    """An impossible anchor (Feb 30) matches no date, like resolve()."""
+    expr = WeekdayRelativeToDate(month=2, day=30, weekday=0, direction=1)
+    start = datetime.date(2026, 1, 1)
+    assert not any(expr.matches(start + datetime.timedelta(days=d)) for d in range(120))
+
+
+# --- OffsetDate.matches() ---
+
+
+def test_offset_matches_across_year_boundary() -> None:
+    """FixedDate(Dec 31)+2 lands on Jan 2 of the next year."""
+    expr = OffsetDate(FixedDate(12, 31), 2)
+    assert expr.matches(datetime.date(2027, 1, 2)) is True
+    assert expr.matches(datetime.date(2026, 12, 31)) is False
+
+
+# --- matches() / resolve() consistency (drift guard) ---
+
+
+def test_matches_consistent_with_resolve_for_non_crossing_exprs() -> None:
+    """matches(d) must equal d in resolve(d.year) for non-crossing exprs."""
+    exprs = [
+        FixedDate(7, 4),
+        FixedDate(2, 29, year=2028),
+        WildcardDay(15),
+        EveryDay(),
+        EveryDayOfMonth(6),
+        NthWeekdayOfMonth(5, 6, 2),
+        NthWeekdayEveryMonth(4, 3),
+        EveryWeekday(0),
+        ResolvedDate.of(datetime.date(2026, 4, 5)),
+    ]
+    start = datetime.date(2025, 11, 1)
+    for offset in range(180):
+        day = start + datetime.timedelta(days=offset)
+        for expr in exprs:
+            assert expr.matches(day) == (day in expr.resolve(day.year))
+
+
+def test_matches_covers_every_resolved_date_for_crossing_exprs() -> None:
+    """Crossing exprs must match every date their resolve() produces."""
+    crossing = [
+        OffsetDate(FixedDate(12, 31), 2),
+        WeekdayRelativeToDate(month=12, day=31, weekday=5, direction=1),
+        WeekdayRelativeToDate(
+            month=12, day=25, weekday=6, direction=-1, anchor_offset=-21
+        ),
+    ]
+    for expr in crossing:
+        for year in (2025, 2026, 2027):
+            for day in expr.resolve(year):
+                assert expr.matches(day)

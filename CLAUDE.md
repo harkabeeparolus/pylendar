@@ -35,6 +35,7 @@ Three main components:
 
 - **Event** - Dataclass representing a calendar event (date + description), implements date-based sorting
 - **DateStringParser** - Parses date strings in several categories: fixed dates (MM/DD, "Month DD", ISO 8601), recurring/wildcard patterns, weekday-based expressions, and special dates (Easter, solstices, moon phases, etc.). See `docs/pylendar.1.md` for the complete list.
+- **DateExpr** - Abstract date expression (`FixedDate`, `OffsetDate`, `WeekdayRelativeToDate`, etc.) with two methods: `resolve(year)` enumerates matching dates (needed by the `-t`/`resolve_today` path) and `matches(date)` is the membership predicate the event-collection hot path uses. Keep them consistent; only `OffsetDate` and `WeekdayRelativeToDate` override `matches` (they can cross year boundaries).
 - **SimpleCPP** - C/C++ preprocessor emulator that handles `#include` directives and removes C-style comments from calendar files
 
 ### Main Flow
@@ -65,7 +66,7 @@ Tests are in `test/` directory:
 - `test_weekday_relative.py` - `Wkday<Date` / `Wkday>Date` weekday-relative-to-date syntax
 - `test_weekday_flag.py` - -w (weekday) flag output formatting
 
-Coverage is at 97% with branch coverage enabled. Untestable boilerplate (dependency `ImportError` guards, `KeyboardInterrupt` handler, `if __name__ == "__main__"`, and the `utcoffset() is None` fallback) is marked `# pragma: no cover`.
+Coverage is at 96% with branch coverage enabled. Untestable boilerplate (dependency `ImportError` guards, `KeyboardInterrupt` handler, `if __name__ == "__main__"`, and the `utcoffset() is None` fallback) is marked `# pragma: no cover`.
 
 ## Linting and Type Checking
 
@@ -85,6 +86,7 @@ When bumping the version, update the `footer` field in the YAML front matter.
 ## Releasing
 
 1. Update `footer` in `docs/pylendar.1.md` to the new version
+   (and refresh the front-matter `date:` field if the month is stale)
 2. Bump `__version__` in `src/pylendar/pylendar.py`
 3. `just check` — must pass
 4. Commit with message `Version X.Y.Z`
