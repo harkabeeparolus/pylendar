@@ -75,7 +75,7 @@ The following options are available:
   OpenBSD/Debian format \[[[*cc*]*yy*]*mm*]*dd*. If *yy* is between 69
   and 99, *cc* defaults to 19; otherwise 20. Also accepts any
   **pylendar** date expression that resolves to exactly one date
-  (including ISO 8601 *YYYY-MM-DD*).
+  (including ISO 8601 *YYYY-MM-DD*, or special dates like "Easter").
 
 **-U** *utc-offset*
 : UTC offset in hours (e.g., -8 for PST, 1 for CET). If neither UTC
@@ -184,8 +184,8 @@ end, so `-1` is the last occurrence and `-2` the second-to-last:
 - *MM/Wkday+N* — Nth weekday of a numbered month (e.g., `03/Sun-1`)
 - *\* Wkday+N* — Nth weekday of every month (e.g., `* Fri+3`)
 
-Weekdays may also be anchored relative to a fixed date. The anchor itself is
-never matched (the search is strict before/after):
+As a pylendar extension, weekdays may also be anchored relative to a fixed
+date. The anchor itself is never matched (the search is strict before/after):
 
 - *Wkday>Month DD* / *Wkday<Month DD* — weekday strictly after or before a date
   (e.g., `Sun<Dec 25` is the last Sunday before Christmas)
@@ -195,7 +195,7 @@ never matched (the search is strict before/after):
 
 The anchor date may include an offset in days: `Sun<Dec 25-7` means
 "Sunday before December 18" (i.e., the anchor is shifted by -7 days
-before the weekday search). This is a pylendar extension.
+before the weekday search).
 
 Day offsets (`+N` / `-N`) in any date expression are limited to
 1–3 digits (±999 days). Four-digit tails are rejected so that values
@@ -257,6 +257,51 @@ Other preprocessor directives (`#define`, `#ifdef`, `#ifndef`, `#else`,
 a deliberate design choice: no real-world calendar files use these
 directives beyond include guards, which are already handled by the
 once-only inclusion behavior.
+
+# EXAMPLES
+
+A short calendar file exercising several of the less obvious date formats.
+Each line is a date, a single tab, and a description:
+
+```text
+May/MonLast	Memorial Day (last Monday in May)
+ThuFourth Nov	Thanksgiving (fourth Thursday in November)
+Oct/SatFourth-2	Hobart Show Day (Thursday before the fourth Saturday)
+* Fri+3	Payday (third Friday of every month)
+Easter-2	Good Friday
+Easter+49	Pentecost
+Sun<Dec 25	Last Sunday before Christmas
+Apr 12	Ada is [1990] years old
+2028-07-14	Start of the LA Olympics
+```
+
+A few of these are worth reading carefully:
+
+- A trailing day offset attaches to the *weekday*, not the month.
+  `Oct/SatFourth-2` first resolves the fourth Saturday in October, then
+  subtracts two days, giving the preceding Thursday. This is how a holiday
+  that floats relative to another floating weekday is expressed.
+- *Wkday<* and *Wkday>* read as "the weekday strictly before (or after) the
+  given date". `Sun<Dec 25` is the Sunday before December 25; the anchor
+  date itself never matches.
+- A single bracketed year in the description is replaced by an age, so
+  `Ada is [1990] years old` prints as `Ada is 36 years old` in 2026 (see
+  [Age Syntax](#age-syntax)).
+
+## Testing your calendar file
+
+You can use the **-t** flag together with **-B** and either **-A** or **-W** to
+preview a window around any date that a single expression resolves to. For
+example, to list reminders for the week before and after Easter, with weekday
+names:
+
+```
+$ pylendar -w -t easter -B7 -W7
+```
+
+Here **-t easter** treats Easter Sunday as "today", **-B7** reaches back seven
+days (to Palm Sunday), **-W7** reaches forward seven days (including Easter
+Monday), and **-w** prints the weekday in front of each line.
 
 # FILES
 
