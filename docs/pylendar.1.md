@@ -163,33 +163,45 @@ are supported:
 
 **Weekday-based dates:**
 
+Ordinal names are the recommended way to write a recurring weekday: First,
+Second, Third, Fourth, Fifth, and Last. `Last` selects the final occurrence of
+the weekday in the month, whether that is the fourth or the fifth:
+
+- *WkdayOrd Month* — ordinal weekday, then month
+  (e.g., `SunFirst Aug` is the first Sunday in August;
+  `FriLast Dec` is the last Friday in December)
+- *Month/WkdayOrd* — slash form, with an optional day offset
+  (e.g., `Oct/SatFourth-2` is two days before the fourth Saturday in October)
+- *MM/WkdayOrd* — same, with a numbered month (e.g., `10/MonSecond`)
+
+The same dates may also be written with BSD's numeric `+N` / `-N` notation.
+A positive `N` counts from the start of the month, a negative `N` from the
+end, so `-1` is the last occurrence and `-2` the second-to-last:
+
 - *Month Wkday+N* — Nth weekday of a month (e.g., `May Sun+2`)
-- *Month Wkday-N* — last Nth weekday of a month (e.g., `May Mon-1`)
-- *MM/Wkday+N* — Nth weekday of numbered month (e.g., `03/Sun-1`)
-- *MM/WkdayOrd* — using ordinal names (e.g., `10/MonSecond`)
-- *Month/WkdayOrd* — with optional day offset (e.g., `Oct/SatFourth-2`)
+- *Month Wkday-N* — Nth-from-last weekday of a month
+  (e.g., `May Mon-1` is the last Monday in May)
+- *MM/Wkday+N* — Nth weekday of a numbered month (e.g., `03/Sun-1`)
 - *\* Wkday+N* — Nth weekday of every month (e.g., `* Fri+3`)
-- *WkdayOrd Month* — ordinal weekday then month (e.g., `SunFirst Aug`)
-- *Wkday>Month DD* — weekday strictly after a date (e.g., `Sat>Jun 19`)
-- *Wkday<Month DD* — weekday strictly before a date (e.g., `Sun<Dec 25`)
-- *Wkday>DD Month* — same, with day before month (e.g., `Sat>19 Jun`)
-- *Wkday<DD Month* — same, with day before month
-- *Wkday>MM/DD* — same, with numeric month (e.g., `Sat>06/19`)
-- *Wkday<MM/DD* — same, with numeric month
+
+Weekdays may also be anchored relative to a fixed date. The anchor itself is
+never matched (the search is strict before/after):
+
+- *Wkday>Month DD* / *Wkday<Month DD* — weekday strictly after or before a date
+  (e.g., `Sun<Dec 25` is the last Sunday before Christmas)
+- *Wkday>DD Month* / *Wkday<DD Month* — same, with the day before the month
+  (e.g., `Sat>19 Jun`)
+- *Wkday>MM/DD* / *Wkday<MM/DD* — same, with a numeric month (e.g., `Sat>06/19`)
 
 The anchor date may include an offset in days: `Sun<Dec 25-7` means
 "Sunday before December 18" (i.e., the anchor is shifted by -7 days
-before the weekday search). The anchor date itself is never matched
-(strict before/after). This is a pylendar extension.
+before the weekday search). This is a pylendar extension.
 
 Day offsets (`+N` / `-N`) in any date expression are limited to
 1–3 digits (±999 days). Four-digit tails are rejected so that values
 like `Sun<Dec 25-2015` aren't silently treated as a huge offset from
 an anchor date. In practice, offsets beyond a year can be expressed
 by changing the base date.
-
-Weekdays may use the ordinal names First, Second, Third, Fourth, Fifth,
-and Last.
 
 **Special dates:**
 

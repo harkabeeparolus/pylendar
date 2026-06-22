@@ -4,7 +4,7 @@ A Python port of the classic BSD `calendar(1)` reminder tool. You keep a
 plain-text file of dates, and `pylendar` tells you which ones are coming up.
 
 ```console
-$ pylendar -w -A30
+$ pylendar -w -W30
 Sun Jun 21*	Summer solstice ☀️
 Wed Jul  1	Canada Day 🍁
 Sat Jul  4	US Independence Day 🦅
@@ -19,30 +19,28 @@ and a description, and the program prints whatever falls in the next few days.
 No database, no sync service, no account to sign up for. Just a file you can
 grep, diff, and keep in version control alongside everything else.
 
-That simplicity is exactly why it's still worth using. The catch is that the
-BSD variants have drifted apart over the decades. FreeBSD, macOS, OpenBSD,
-NetBSD, and Debian each grew their own set of date formats and flags, and none
-of them are easy to get running on a modern Linux box or inside a Python
-project.
+That simplicity is why it's still worth using. The catch is that the BSD
+variants have drifted apart over the decades. FreeBSD, macOS, OpenBSD, NetBSD,
+and Debian each grew their own set of date formats and flags, and none of them
+are easy to get running on many modern Linux systems.
 
 `pylendar` brings the idea back as a single, lightweight Python program that:
 
 - **reads them all.** It understands the date formats from every major BSD
-  variant, so calendar files you already have just work.
+  variant, so existing calendar files just work.
 - **adds a few niceties.** ISO 8601 dates (`2026-02-17`), automatic age
   calculation (`Pat turns [1990]` becomes `Pat turns 36`), and weekday-relative
   dates like `Sun<Dec 25` (the last Sunday before Christmas).
 - **gets the astronomy right.** Moon phases, equinoxes, and solstices are
-  pinned down precisely with the `astronomy-engine` library instead of the old
-  approximation formulas. Easter and the Chinese New Year land on the right day
-  every year, too.
+  pinned down precisely with the `astronomy-engine` library. Easter and the
+  Chinese New Year land on the right day every year, too.
+- **speaks Unicode.** Full UTF-8 and emoji support ⭐, so your calendar files
+  read the same everywhere.
 - **runs anywhere Python does**, and installs in a single command.
 
-One thing it leaves out on purpose: the BSD `calendar -a` mode, where a daily
-cron job runs as root, reads every user's calendar file, and emails each person
-their upcoming events. `pylendar` only ever runs as you, on your own files, and
-never sends mail. If you want a daily reminder, schedule `pylendar` yourself
-with cron or a systemd timer.
+`pylendar` intentionally omits the superuser email mode. On BSD, `calendar -a`
+processes every user's calendar file and mails each person their results.
+`pylendar` only ever runs as you, on your own files, and never sends mail.
 
 ## Installing
 
@@ -65,7 +63,10 @@ Or add it to a project:
 $ uv add pylendar
 ```
 
-It also installs with `pip install pylendar`. You'll need Python 3.11 or newer.
+Because it carries [PEP 723](https://peps.python.org/pep-0723/) inline
+metadata, the single `pylendar.py` source file also runs as a stand-alone
+script with no installation at all: `uv run --script path/to/pylendar.py`. It
+also installs the traditional way with `pip install pylendar`.
 
 ## Getting started
 
