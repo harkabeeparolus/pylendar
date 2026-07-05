@@ -113,6 +113,17 @@ Pylendar now matches macOS/FreeBSD semantics for both flags:
 - The **default** (no flag) uses the Friday look-ahead logic (ahead=3 on
   Friday, 1 otherwise) and matches all implementations.
 
+### Bare numeric dates
+
+A date field consisting only of digits (e.g. `06`, seen in FreeBSD's
+`de_DE/calendar.geschichte`) matches nothing in pylendar. This agrees
+with observed behavior everywhere: macOS drops such lines, and while
+FreeBSD-current's parser classifies a bare number as a month, its
+matching code has no month-only case, so the line never displays there
+either. The manpage sentence "a month without a day matches the first
+of that month" applies to month *names* (e.g. `June` alone), which
+pylendar supports.
+
 ## Manpage Sections
 
 | Section | macOS | FreeBSD | OpenBSD | NetBSD | Debian |

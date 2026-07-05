@@ -26,7 +26,7 @@ import os
 import re
 import sys
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Self, TypeAlias
@@ -90,6 +90,7 @@ ORDINAL_MAP: dict[str, int] = {
     "last": -1,
 }
 _LETTER = r"[^\W\d_]"  # Unicode letter (like [a-z] but locale-aware)
+_NAME = rf"{_LETTER}+\.?"  # month/weekday name; some locales abbreviate with a dot
 _NN = r"\d{1,2}"  # 1-or-2-digit number (month or day)
 _DELTA = r"\d{1,3}"  # max ±999 days; 4+ digits look like a year
 
@@ -186,7 +187,7 @@ class EveryDayOfMonth(DateExpr):
 
 @dataclass(frozen=True)
 class ResolvedDate(DateExpr):
-    """A pre-resolved date or set of dates (Easter, equinoxes, moon phases, etc.)."""
+    """A pre-resolved date or set of dates."""
 
     dates: frozenset[datetime.date]
 
@@ -198,6 +199,23 @@ class ResolvedDate(DateExpr):
     def resolve(self, year: int) -> DateSet:  # noqa: ARG002
         """Return all pre-resolved dates."""
         return set(self.dates)
+
+
+@dataclass(frozen=True)
+class BuiltinSpecial(DateExpr):
+    """A built-in special date (Easter, seasons, moon phases, etc.).
+
+    Resolution is computed lazily per year, so offset expressions can reach
+    into years outside the display window (e.g. DecSolstice+15 checked in
+    early January must resolve the previous year's solstice).
+    """
+
+    name: str
+    utc_offset_hours: float = 0
+
+    def resolve(self, year: int) -> DateSet:
+        """Return the dates of this special date in the given year."""
+        return set(_builtin_special_dates(year, self.utc_offset_hours)[self.name])
 
 
 def _find_nth_weekday(
@@ -453,9 +471,8 @@ def process_calendar(
         friday=opts.friday,
         expand_weekends=opts.expand_weekends,
     )
-    years_to_check = {d.year for d in dates_to_check}
     date_exprs = parse_special_dates(
-        calendar_lines, years_to_check, opts.utc_offset_hours
+        calendar_lines, utc_offset_hours=opts.utc_offset_hours
     )
     directives = extract_directives(calendar_lines)
     date_parser = DateStringParser(date_exprs, directives=directives)
@@ -568,9 +585,21 @@ class DateStringParser:  # pylint: disable=too-many-instance-attributes
         self.date_exprs: dict[str, DateExpr] = date_exprs or {}
         dirs = directives or CalendarDirectives()
 
-        # Start with system locale names
+        # Start with the current locale's names (in case an embedding
+        # application has called locale.setlocale itself)
         self.month_map = self.build_month_map()
         self.weekday_map = self.build_weekday_map()
+
+        # Layer the user's environment locale on top, mirroring BSD
+        # calendar's setlocale(LC_ALL, "") at startup
+        saved_lc_time = locale.setlocale(locale.LC_TIME)
+        try:
+            locale.setlocale(locale.LC_TIME, "")
+            self._layer_locale_maps()
+        except locale.Error:
+            log.debug("Environment locale not available; skipping")
+        finally:
+            locale.setlocale(locale.LC_TIME, saved_lc_time)
 
         # Layer C/English names on top
         with calendar.different_locale(("C", "UTF-8")):
@@ -595,26 +624,26 @@ class DateStringParser:  # pylint: disable=too-many-instance-attributes
             for word, n in zip(dirs.sequence, (1, 2, 3, 4, 5, -1), strict=True):
                 self.ordinal_map[word.casefold()] = n
             log.info(f"Custom ordinal sequence: {dirs.sequence}")
-        self.ordinals_re = "|".join(self.ordinal_map)
+        self.ordinals_re = "|".join(map(re.escape, self.ordinal_map))
 
         # Precompile regexes used in parsing
         self._re_special_offset = re.compile(rf"({_LETTER}+)([+-])({_DELTA})")
         self._re_full_date = re.compile(r"(\d{4})[/-](\d{1,2})[/-](\d{1,2})")
-        self._re_slash_dd = re.compile(rf"({_NN}|{_LETTER}+)/({_NN})")
-        self._re_mm_wkday_offset = re.compile(rf"({_NN})/({_LETTER}+)([+-])({_DELTA})")
+        self._re_slash_dd = re.compile(rf"({_NN}|{_NAME})/({_NN})")
+        self._re_mm_wkday_offset = re.compile(rf"({_NN})/({_NAME})([+-])({_DELTA})")
         self._re_month_wkday_offset = re.compile(
-            rf"({_LETTER}+)\s+({_LETTER}+)([+-])({_DELTA})"
+            rf"({_NAME})\s+({_NAME})([+-])({_DELTA})"
         )
-        self._re_month_day_1 = re.compile(rf"({_LETTER}+)\s+({_NN})")
-        self._re_month_day_2 = re.compile(rf"({_NN})\s+({_LETTER}+)")
-        self._re_wildcard_wkday = re.compile(rf"\*\s+({_LETTER}+)([+-])({_DELTA})")
+        self._re_month_day_1 = re.compile(rf"({_NAME})\s+({_NN})")
+        self._re_month_day_2 = re.compile(rf"({_NN})\s+({_NAME})")
+        self._re_wildcard_wkday = re.compile(rf"\*\s+({_NAME})([+-])({_DELTA})")
         self._re_wildcard_day = re.compile(r"\*\s*(\d{1,2})|(\d{1,2})\s+\*")
-        self._re_month_wildcard = re.compile(rf"({_LETTER}+)\s*\*")
+        self._re_month_wildcard = re.compile(rf"({_NAME})\s*\*")
 
-        ltr, ords = _LETTER, self.ordinals_re
-        self._re_mm_ord = re.compile(rf"({_NN})/({ltr}+)({ords})([+-]{_DELTA})?")
-        self._re_month_ord_1 = re.compile(rf"({ltr}+)/({ltr}+)({ords})([+-]{_DELTA})?")
-        self._re_month_ord_2 = re.compile(rf"({_LETTER}+)({ords})\s+({_LETTER}+)")
+        name, ords = _NAME, self.ordinals_re
+        self._re_mm_ord = re.compile(rf"({_NN})/({name})({ords})([+-]{_DELTA})?")
+        self._re_month_ord_1 = re.compile(rf"({name})/({name})({ords})([+-]{_DELTA})?")
+        self._re_month_ord_2 = re.compile(rf"({name})({ords})\s+({name})")
 
     @staticmethod
     def build_month_map() -> dict[str, int]:
@@ -788,7 +817,7 @@ class DateStringParser:  # pylint: disable=too-many-instance-attributes
         return None
 
     _WKDAY_REL_RE: ClassVar[re.Pattern[str]] = re.compile(
-        rf"(?P<wkday>{_LETTER}+)\s*(?P<dir>[<>])\s*(?P<anchor>.+)"
+        rf"(?P<wkday>{_NAME})\s*(?P<dir>[<>])\s*(?P<anchor>.+)"
     )
 
     # Offset capped at 3 digits so 4-digit tails (e.g. Sun<Dec 25-2015)
@@ -1017,7 +1046,7 @@ def get_moon_phases(year: int, utc_offset_hours: float = 0) -> dict[str, DateSet
 
 
 def _fractional_day_of_year(dt: datetime.datetime) -> float:
-    """Return the fractional day-of-year for a datetime (1-based, like tm_yday)."""
+    """Return the fractional day-of-year for a datetime (1-based, tm_yday + 1)."""
     jan1 = datetime.datetime(dt.year, 1, 1)
     elapsed = dt - jan1
     return elapsed.total_seconds() / 86400 + 1
@@ -1069,33 +1098,50 @@ def print_diagnostic(mode: str, year: int, utc_offset: float, longitude: float) 
             print(f"{label} {year}:\t{entries}")
 
 
+_SPECIAL_NAMES: tuple[str, ...] = (
+    "easter",
+    "paskha",
+    "chinesenewyear",
+    "marequinox",
+    "sepequinox",
+    "junsolstice",
+    "decsolstice",
+    "newmoon",
+    "fullmoon",
+)
+"""Keywords of the built-in special dates computed by ``_builtin_special_dates``."""
+
+
 @functools.lru_cache
-def _builtin_date_exprs(year: int, utc_offset_hours: float = 0) -> dict[str, DateExpr]:
-    """Compute built-in special date expressions (Easter, seasons, moon phases, etc.).
+def _builtin_special_dates(
+    year: int, utc_offset_hours: float = 0
+) -> dict[str, frozenset[datetime.date]]:
+    """Compute the built-in special dates (Easter, seasons, moon phases, etc.).
 
-    Cached so that both ``resolve_today`` and ``parse_special_dates`` share the
-    same computation without paying the cost twice.  Callers that need to add
-    aliases **must** copy the returned dict before mutating it.
+    Cached so that repeated per-year lookups from ``BuiltinSpecial.resolve``
+    share the same computation.
     """
-    date_exprs: dict[str, DateExpr] = {}
-
-    date_exprs["easter"] = ResolvedDate.of(dateutil.easter.easter(year))
-    date_exprs["paskha"] = ResolvedDate.of(
-        dateutil.easter.easter(year, method=dateutil.easter.EASTER_ORTHODOX)
-    )
-    date_exprs["chinesenewyear"] = ResolvedDate.of(LunarDate(year, 1, 1).toSolarDate())
-
-    date_exprs |= {
-        name: ResolvedDate.of(date)
+    dates: dict[str, frozenset[datetime.date]] = {
+        "easter": frozenset({dateutil.easter.easter(year)}),
+        "paskha": frozenset(
+            {dateutil.easter.easter(year, method=dateutil.easter.EASTER_ORTHODOX)}
+        ),
+        "chinesenewyear": frozenset({LunarDate(year, 1, 1).toSolarDate()}),
+    }
+    dates |= {
+        name: frozenset({date})
         for name, date in get_seasons(year, utc_offset_hours).items()
     }
-
-    date_exprs |= {
-        name: ResolvedDate(frozenset(dates))
-        for name, dates in get_moon_phases(year, utc_offset_hours).items()
+    dates |= {
+        name: frozenset(days)
+        for name, days in get_moon_phases(year, utc_offset_hours).items()
     }
+    return dates
 
-    return date_exprs
+
+def _builtin_special_exprs(utc_offset_hours: float = 0) -> dict[str, DateExpr]:
+    """Build the name → expression map for all built-in special dates."""
+    return {name: BuiltinSpecial(name, utc_offset_hours) for name in _SPECIAL_NAMES}
 
 
 def _collect_alias_pairs(calendar_lines: list[str]) -> list[tuple[str, str]]:
@@ -1166,23 +1212,15 @@ def _resolve_special_date_aliases(
 
 def parse_special_dates(
     calendar_lines: list[str],
-    years: Iterable[int],
+    *,
     utc_offset_hours: float = 0,
 ) -> dict[str, DateExpr]:
     """Parse special date definitions and aliases from the calendar file.
 
-    Built-ins are materialized for every year in ``years`` and unioned per
-    keyword, so callers should pass the year set spanned by the date
-    range under consideration.
+    Built-ins resolve lazily per year, so they work for any year the event
+    matching (or an offset expression) happens to touch.
     """
-    merged: dict[str, frozenset[datetime.date]] = {}
-    for y in years:
-        for name, expr in _builtin_date_exprs(y, utc_offset_hours).items():
-            if isinstance(expr, ResolvedDate):
-                merged[name] = merged.get(name, frozenset()) | expr.dates
-    date_exprs: dict[str, DateExpr] = {
-        name: ResolvedDate(dates) for name, dates in merged.items()
-    }
+    date_exprs = _builtin_special_exprs(utc_offset_hours)
 
     _resolve_special_date_aliases(calendar_lines, date_exprs)
 
@@ -1300,7 +1338,7 @@ def resolve_today(t_str: str | None, utc_offset_hours: float = 0) -> datetime.da
         return legacy
 
     year = datetime.date.today().year
-    date_exprs = _builtin_date_exprs(year, utc_offset_hours)
+    date_exprs = _builtin_special_exprs(utc_offset_hours)
     date_expr = DateStringParser(date_exprs).parse(t_str)
     if date_expr is None:
         msg = f"Invalid -t date format: {t_str}"
@@ -1420,7 +1458,8 @@ def build_parser() -> argparse.ArgumentParser:
         "-l",
         type=float,
         metavar="longitude",
-        help="East longitude of your stranding. Default derived from UTC offset.",
+        help="East longitude for lunar and solar calculations. "
+        "Default derived from UTC offset.",
     )
     parser.add_argument(
         "-U",

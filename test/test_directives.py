@@ -10,6 +10,8 @@ import pytest
 from pylendar.pylendar import (
     CalendarDirectives,
     DateStringParser,
+    FixedDate,
+    NthWeekdayOfMonth,
     extract_directives,
     parse_special_dates,
 )
@@ -160,6 +162,51 @@ def test_english_still_works_with_locale(german_locale: str) -> None:
     assert "jan" in parser.month_map
 
 
+def test_environment_locale_names_recognized(
+    german_locale: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """National month names from the environment locale work without LANG=.
+
+    BSD calendar honors the user's environment locale via setlocale(LC_ALL,
+    ""), so a German user's calendar file can say "17 Dezember" without any
+    LANG= directive.
+    """
+    monkeypatch.setenv("LC_ALL", german_locale)
+    parser = DateStringParser()
+    assert "dezember" in parser.month_map
+    assert parser.parse("17 dezember") == FixedDate(month=12, day=17)
+
+
+def test_invalid_environment_locale_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An invalid environment locale is ignored; English names still work."""
+    monkeypatch.setenv("LC_ALL", "xx_INVALID.UTF-8")
+    parser = DateStringParser()
+    assert "january" in parser.month_map
+
+
+def test_dotted_month_abbreviation_parses() -> None:
+    """Month abbreviations with a trailing dot (as in ru_RU/fr_FR) parse.
+
+    Locale-independent: the dotted names are injected into the map directly,
+    standing in for what e.g. LANG=ru_RU.UTF-8 produces ("янв.", "февр.").
+    """
+    parser = DateStringParser()
+    parser.month_map["janv."] = 1
+    assert parser.parse("14 janv.") == FixedDate(month=1, day=14)
+    assert parser.parse("janv. 14") == FixedDate(month=1, day=14)
+    assert parser.parse("janv./14") == FixedDate(month=1, day=14)
+
+
+def test_dotted_weekday_abbreviation_parses() -> None:
+    """Weekday abbreviations with a trailing dot work in weekday formats."""
+    parser = DateStringParser()
+    parser.weekday_map["lun."] = 0
+    assert parser.parse("05/lun.First") == NthWeekdayOfMonth(5, 0, 1)
+    assert parser.parse("lun.>Jun 19") is not None
+
+
 def test_invalid_locale_warns(caplog: pytest.LogCaptureFixture) -> None:
     """Invalid locale warns and falls back to English."""
     with caplog.at_level(logging.WARNING, logger="pylendar"):
@@ -229,7 +276,7 @@ def test_custom_ordinal_named_month(custom_parser: DateStringParser) -> None:
 
 def test_right_side_known_alias() -> None:
     """myfeast=Easter — right side known, left gets the value."""
-    date_exprs = parse_special_dates(["myfeast=Easter"], [2026])
+    date_exprs = parse_special_dates(["myfeast=Easter"])
     assert "myfeast" in date_exprs
     easter_dates = date_exprs["easter"].resolve(2026)
     assert date_exprs["myfeast"].resolve(2026) == easter_dates
@@ -237,7 +284,7 @@ def test_right_side_known_alias() -> None:
 
 def test_left_side_known_alias() -> None:
     """Easter=spring — left side known, right gets the value."""
-    date_exprs = parse_special_dates(["Easter=spring"], [2026])
+    date_exprs = parse_special_dates(["Easter=spring"])
     assert "spring" in date_exprs
     easter_dates = date_exprs["easter"].resolve(2026)
     assert date_exprs["spring"].resolve(2026) == easter_dates
@@ -253,7 +300,7 @@ def test_conflicting_builtin_alias_warns_and_keeps_originals(
     )
 
     with caplog.at_level(logging.WARNING, logger="pylendar"):
-        date_exprs = parse_special_dates(["Easter=Paskha"], [2026])
+        date_exprs = parse_special_dates(["Easter=Paskha"])
 
     assert "Conflicting special-date alias ignored" in caplog.text
     assert date_exprs["easter"].resolve(2026) == {catholic_easter}
@@ -262,7 +309,7 @@ def test_conflicting_builtin_alias_warns_and_keeps_originals(
 
 def test_alias_chain_resolves_when_root_appears_later() -> None:
     """Forward alias chains resolve once a known root appears later."""
-    date_exprs = parse_special_dates(["spring=pasen", "Easter=pasen"], [2026])
+    date_exprs = parse_special_dates(["spring=pasen", "Easter=pasen"])
     easter_dates = date_exprs["easter"].resolve(2026)
     assert date_exprs["pasen"].resolve(2026) == easter_dates
     assert date_exprs["spring"].resolve(2026) == easter_dates
@@ -270,7 +317,7 @@ def test_alias_chain_resolves_when_root_appears_later() -> None:
 
 def test_alias_chain_resolves_regardless_of_order() -> None:
     """Alias chains resolve the same way when the root comes first."""
-    date_exprs = parse_special_dates(["Easter=pasen", "spring=pasen"], [2026])
+    date_exprs = parse_special_dates(["Easter=pasen", "spring=pasen"])
     easter_dates = date_exprs["easter"].resolve(2026)
     assert date_exprs["pasen"].resolve(2026) == easter_dates
     assert date_exprs["spring"].resolve(2026) == easter_dates
@@ -281,7 +328,7 @@ def test_unresolved_alias_chain_warns_and_is_ignored(
 ) -> None:
     """Aliases with no path to a known root warn and are ignored."""
     with caplog.at_level(logging.WARNING, logger="pylendar"):
-        date_exprs = parse_special_dates(["foo=bar", "bar=baz"], [2026])
+        date_exprs = parse_special_dates(["foo=bar", "bar=baz"])
 
     assert "Unresolved special-date alias ignored" in caplog.text
     assert "foo" not in date_exprs
@@ -294,7 +341,7 @@ def test_alias_cycle_on_same_root_is_noop(
 ) -> None:
     """A back-reference to an existing alias is a no-op, not a conflict."""
     with caplog.at_level(logging.WARNING, logger="pylendar"):
-        date_exprs = parse_special_dates(["myfeast=Easter", "Easter=myfeast"], [2026])
+        date_exprs = parse_special_dates(["myfeast=Easter", "Easter=myfeast"])
 
     assert caplog.text == ""
     easter_dates = date_exprs["easter"].resolve(2026)
@@ -309,7 +356,7 @@ def test_bogus_date_with_offset_returns_none() -> None:
 
 def test_special_date_with_four_digit_offset_returns_none() -> None:
     """Offsets with more than 3 digits are rejected during parsing."""
-    parser = DateStringParser(parse_special_dates([], [2026]))
+    parser = DateStringParser(parse_special_dates([]))
     assert parser.parse("Easter+1000") is None
 
 
@@ -346,6 +393,17 @@ SunDernier Jun\tLast Sunday of June
     assert result == ["Jun 28*\tLast Sunday of June"]
 
 
+def test_sequence_regex_metacharacters_do_not_crash(run_calendar):
+    """SEQUENCE= words containing regex metacharacters must not crash parsing."""
+    content = """\
+SEQUENCE=a( b c d e f
+05/MonFirst\tFirst Monday of May
+"""
+    today = datetime.date(2026, 5, 4)
+    result = run_calendar(content, today, ahead=0)
+    assert result == ["May  4*\tFirst Monday of May"]
+
+
 def test_english_ordinals_with_sequence_e2e(run_calendar):
     """English ordinals still work when SEQUENCE= is active."""
     content = """\
@@ -378,7 +436,7 @@ Oct 12\tFixed date
 
 def test_non_ascii_alias_with_offset() -> None:
     """Non-ASCII alias like Påsk=Easter resolves with +/- offsets."""
-    date_exprs = parse_special_dates(["Påsk=Easter"], [2026])
+    date_exprs = parse_special_dates(["Påsk=Easter"])
     parser = DateStringParser(date_exprs=date_exprs)
     result = parser.parse("Påsk-47")
     assert result is not None
@@ -388,7 +446,7 @@ def test_non_ascii_alias_with_offset() -> None:
 
 def test_casefold_alias_with_eszett() -> None:
     """Alias containing ß matches via casefold (ß→ss)."""
-    date_exprs = parse_special_dates(["Fassnacht=Easter"], [2026])
+    date_exprs = parse_special_dates(["Fassnacht=Easter"])
     parser = DateStringParser(date_exprs=date_exprs)
     # casefold turns both Faßnacht and Fassnacht into fassnacht
     result = parser.parse("Faßnacht-47")

@@ -18,6 +18,7 @@ from pylendar.pylendar import (
     ResolvedDate,
     get_matching_events,
     get_moon_phases,
+    get_seasons,
     main,
     replace_age_in_description,
 )
@@ -833,3 +834,17 @@ def test_year_boundary_new_moon(run_calendar):
     ahead = (earliest_jan_new_moon - today).days + 1
     result = run_calendar("NewMoon\tNM event", today, ahead=ahead)
     assert any("NM event" in line for line in result)
+
+
+def test_year_boundary_special_offset(run_calendar):
+    """Special+N whose base date is in the previous year is found in January.
+
+    DecSolstice+15 lands around Jan 5. Checking on that very day must find
+    the event, even though the December solstice it offsets from belongs to
+    the previous year, which lies outside the display window.
+    """
+    solstice = get_seasons(2026)["decsolstice"]
+    target = solstice + datetime.timedelta(days=15)
+    assert target.year == 2027  # sanity: the offset crosses the year boundary
+    result = run_calendar("DecSolstice+15\tYule ends", target, ahead=1)
+    assert any("Yule ends" in line for line in result)

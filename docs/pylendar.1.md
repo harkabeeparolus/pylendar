@@ -107,6 +107,12 @@ The following options are available:
 To handle calendars in a national locale, specify `LANG=<locale_name>`
 in the calendar file as early as possible.
 
+Month and weekday names from the user's environment locale (the
+**LC_ALL**, **LC_TIME**, or **LANG** environment variables) are always
+recognized, even without a `LANG=` directive, matching BSD **calendar**
+behavior. Dotted abbreviations produced by some locales (e.g. `janv.`,
+`янв.`) are accepted wherever a month or weekday name may appear.
+
 To provide local names for ordinal sequences, specify:
 `SEQUENCE=<first> <second> <third> <fourth> <fifth> <last>`
 in the calendar file as early as possible.
