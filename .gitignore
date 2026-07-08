@@ -208,3 +208,6 @@ __marimo__/
 
 # Built manpages
 share/
+
+# Symlink to local FreeBSD calendar files (development aid)
+/calendars
