@@ -260,9 +260,10 @@ are not needed.
 
 Other preprocessor directives (`#define`, `#ifdef`, `#ifndef`, `#else`,
 `#endif`, `#undef`, `#warning`, `#error`) are silently ignored. This is
-a deliberate design choice: no real-world calendar files use these
-directives beyond include guards, which are already handled by the
-once-only inclusion behavior.
+a deliberate design choice: no known calendar collections use these
+directives for anything other than include guards, which are already
+handled by the once-only inclusion behavior. Supporting them is out of
+scope unless a real, practical use case is demonstrated.
 
 # EXAMPLES
 
@@ -355,11 +356,22 @@ following differences exist:
 : The **-a** flag (mail entries to all users) will not be implemented.
   **pylendar** is designed to run as the current user only; it will not
   run as root to monitor other user accounts, and it will not send
-  email.
+  email. The OpenBSD **RECIPIENT_EMAIL=** variable is ignored for the
+  same reason.
 
 **No -b Cyrillic mode**
 : The **-b** flag and **BODUN=** variable (Cyrillic "Old New Year"
   mode from OpenBSD and Debian) will not be implemented.
+
+**No CALENDAR= variable**
+: The **CALENDAR=** variable (Julian/Gregorian calendar switching from
+  OpenBSD and Debian) will not be implemented.
+
+**utf-8 pseudo-locale accepted**
+: Debian's `LANG=utf-8` pseudo-locale (dates in the C locale,
+  descriptions in UTF-8) is recognized and treated as the C locale.
+  Since **pylendar** input must already be UTF-8 and English names are
+  always recognized, this matches the Debian behavior.
 
 **No -d option**
 : The **-d** flag (debug date info) is not implemented; use **-v**

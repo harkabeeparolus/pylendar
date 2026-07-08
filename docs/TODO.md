@@ -1,5 +1,33 @@
 # TODO
 
+## Out of scope
+
+### Full cpp directive support (`#define`, `#ifdef`, `#ifndef`, `#undef`, `#else`)
+
+Permanently out of scope, until and unless someone demonstrates a real,
+practical use case. SimpleCPP stays as simple as possible: `#include`
+plus C-style comment stripping. No calendar collections observed in the
+wild use cpp directives for anything other than include guards, and
+those are already covered by SimpleCPP's once-only inclusion behavior
+(see the PREPROCESSOR section of the manpage). Other directives are
+silently ignored.
+
+### Niche OpenBSD/Debian extensions
+
+Also permanently out of scope, absent a demonstrated practical use case:
+
+- **`CALENDAR=`** (Julian/Gregorian calendar switching; OpenBSD, Debian)
+- **`BODUN=`** and the **`-b`** flag (Cyrillic "Old New Year" mode;
+  OpenBSD, Debian) — already declared unsupported in the manpage
+- **`RECIPIENT_EMAIL=`** (OpenBSD) — belongs with the `-a` mail mode,
+  which is already out of scope: pylendar runs as the current user only
+  and never sends email
+
+Debian's **`utf-8` pseudo-locale** ("dates in the C locale,
+descriptions in UTF-8") needs no work: `LANG=utf-8` is already in the
+locale-skip set and is silently treated as the C locale, which matches
+Debian semantics since pylendar input must be UTF-8 anyway.
+
 ## Completed feature notes
 
 These were previously tracked as future plans and are already implemented.

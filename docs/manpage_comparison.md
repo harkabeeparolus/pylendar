@@ -73,6 +73,12 @@ Comparison of four implementations of the `calendar(1)` utility.
 | **`RECIPIENT_EMAIL=`** | — | — | yes | — | — |
 | **`utf-8` pseudo-locale** | — | — | — | — | yes |
 
+Pylendar supports `LANG=`, `SEQUENCE=`, `Easter=`, `Paskha=`, and the
+`utf-8` pseudo-locale (treated as the C locale, which matches Debian
+semantics since pylendar input must be UTF-8). `CALENDAR=`, `BODUN=`,
+and `RECIPIENT_EMAIL=` are permanently out of scope; see "Out of scope"
+in [TODO.md](TODO.md).
+
 ## Preprocessor Directives
 
 | Directive | macOS | FreeBSD | OpenBSD | NetBSD | Debian |
@@ -89,6 +95,12 @@ Comparison of four implementations of the `calendar(1)` utility.
 Note: macOS/FreeBSD implement a limited cpp internally; OpenBSD, NetBSD,
 and Debian invoke the external cpp(1) preprocessor (which supports the
 full directive set).
+
+Pylendar supports only `#include` (with once-only inclusion, so include
+guards are unnecessary) and ignores the rest. This is a permanent design
+decision, not a gap to close: no calendar collections observed in the
+wild use cpp directives for anything other than include guards. See
+"Out of scope" in [TODO.md](TODO.md).
 
 ## File Search Paths
 
