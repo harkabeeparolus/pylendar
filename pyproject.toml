@@ -3,7 +3,22 @@ name = "pylendar"
 dynamic = ["version"]
 description = "Python port of the calendar reminder utility commonly found on BSD-style systems, which displays upcoming relevant dates."
 readme = "README.md"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+keywords = ["calendar", "reminder", "bsd", "dates", "events", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: POSIX",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Topic :: Office/Business :: Scheduling",
+    "Topic :: Utilities",
+]
 urls.source = "https://github.com/harkabeeparolus/pylendar"
+urls.issues = "https://github.com/harkabeeparolus/pylendar/issues"
 authors = [
     { name = "Fredrik Mellström", email = "11281108+harkabeeparolus@users.noreply.github.com" },
 ]
