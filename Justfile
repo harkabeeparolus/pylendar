@@ -12,6 +12,9 @@ _default:
 # Autofix, lint, typecheck, and test
 check: fix lint test
 
+# Lint, typecheck, and test without modifying files (for CI)
+ci: lint_check lint test
+
 # Run the main application
 run *ARGS:
     uv run pylendar {{ARGS}}
@@ -50,6 +53,12 @@ coverage *ARGS:
 fix:
     uv run ruff check --fix .
     uv run ruff format .
+
+# Check ruff lint and formatting without modifying files
+[group('details')]
+lint_check:
+    uv run ruff check .
+    uv run ruff format --check .
 
 # Run all linting and type checking tools
 [group('details')]

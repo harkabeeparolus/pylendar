@@ -31,6 +31,9 @@ jobs:
       - name: Install just
         uses: extractions/setup-just@v2
 
+      - name: Run checks
+        run: just ci
+
       - name: Build manpage
         run: just build_man
 
