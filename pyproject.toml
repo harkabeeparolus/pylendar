@@ -53,6 +53,7 @@ dev = [
     "ty>=0.0.17",
     "types-python-dateutil>=2.9.0.20260124",
     "basedpyright>=1.38.2",
+    "ruff>=0.9",
 ]
 
 # Linting configuration
@@ -98,8 +99,8 @@ strict = true
 [tool.pylint]
 main.py-version = "3.11"
 main.jobs = 0                       # 0 means all available cores
-design.max-module-lines = 1700      # single-file design is intentional
 main.fail-on = ["useless-suppression"]
+design.max-module-lines = 1700      # single-file design is intentional
 reports.output-format = "colorized"
 
 [tool.pylint."messages control"]
