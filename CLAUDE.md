@@ -57,7 +57,8 @@ Tests are in `test/` directory:
 
 - `test_astronomical.py` - Astronomical special dates (moon phases and seasons)
 - `test_cpp.py` - SimpleCPP preprocessor tests (includes, circular detection, edge cases)
-- `test_date_sorting_e2e.py` - Integration tests for event sorting with mixed date formats, plus unit-level edge cases (age replacement, Event comparison, impossible dates, unparseable lines)
+- `test_date_formats_e2e.py` - End-to-end output tests for each supported date format (fixed dates, wildcards, weekday ordinals, astronomical specials)
+- `test_date_sorting_e2e.py` - Integration tests for event sorting, date windows, continuation lines, and CLI smoke tests, plus unit-level edge cases (age replacement, Event comparison, impossible dates, unparseable lines) and year-boundary matching
 - `test_directives.py` - LANG= and SEQUENCE= directive parsing, special-date aliases, DateStringParser edge cases
 - `test_find_calendar.py` - Calendar file discovery, CALENDAR_DIR support, and fallback paths
 - `test_friday_weekend_flags.py` - -F (friday) and -W (weekend-ignore) flags
