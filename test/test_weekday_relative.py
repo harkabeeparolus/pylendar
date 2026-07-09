@@ -5,6 +5,7 @@ import datetime
 import pytest
 
 from pylendar.pylendar import (
+    BuiltinSpecial,
     DateStringParser,
     EveryDay,
     EveryDayOfMonth,
@@ -13,7 +14,6 @@ from pylendar.pylendar import (
     NthWeekdayEveryMonth,
     NthWeekdayOfMonth,
     OffsetDate,
-    ResolvedDate,
     WeekdayRelativeToDate,
     WildcardDay,
     parse_special_dates,
@@ -263,7 +263,7 @@ def test_matches_consistent_with_resolve_for_non_crossing_exprs() -> None:
         NthWeekdayOfMonth(5, 6, 2),
         NthWeekdayEveryMonth(4, 3),
         EveryWeekday(0),
-        ResolvedDate.of(datetime.date(2026, 4, 5)),
+        BuiltinSpecial("easter"),
     ]
     start = datetime.date(2025, 11, 1)
     for offset in range(180):

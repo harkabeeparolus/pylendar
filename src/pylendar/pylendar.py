@@ -29,7 +29,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, Self, TypeAlias
+from typing import ClassVar, TypeAlias
 
 try:
     import dateutil.easter
@@ -183,22 +183,6 @@ class EveryDayOfMonth(DateExpr):
         """Return all dates in the given month."""
         num_days = calendar.monthrange(year, self.month)[1]
         return {datetime.date(year, self.month, d) for d in range(1, num_days + 1)}
-
-
-@dataclass(frozen=True)
-class ResolvedDate(DateExpr):
-    """A pre-resolved date or set of dates."""
-
-    dates: frozenset[datetime.date]
-
-    @classmethod
-    def of(cls, *dates: datetime.date) -> Self:
-        """Create from one or more individual dates."""
-        return cls(frozenset(dates))
-
-    def resolve(self, year: int) -> DateSet:  # noqa: ARG002
-        """Return all pre-resolved dates."""
-        return set(self.dates)
 
 
 @dataclass(frozen=True)

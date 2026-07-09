@@ -15,11 +15,11 @@ from pylendar.pylendar import (
     Event,
     FixedDate,
     OffsetDate,
-    ResolvedDate,
     get_matching_events,
     get_moon_phases,
     get_seasons,
     main,
+    parse_special_dates,
     replace_age_in_description,
 )
 
@@ -769,8 +769,7 @@ def test_offset_date_only_wraps_variable_bases() -> None:
     must NOT be an OffsetDate — it would mismark the resulting date as
     variable. That extension would need a separate fixed-aware wrapper.
     """
-    parser = DateStringParser()
-    parser.date_exprs["easter"] = ResolvedDate.of(datetime.date(2026, 4, 5))
+    parser = DateStringParser(parse_special_dates([]))
 
     # Positive: representative inputs from each parser path that currently
     # produces an OffsetDate. Each must wrap a variable base.
