@@ -2,7 +2,6 @@
 
 import datetime
 import logging
-import sys
 from pathlib import Path
 
 import pytest
@@ -52,9 +51,8 @@ def test_cli_init_writes_to_home(
     fake_home = tmp_path / "home"
     fake_home.mkdir()
     monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
-    monkeypatch.setattr(sys, "argv", ["pylendar", "--init"])
 
-    main()
+    main(["--init"])
 
     target = fake_home / ".calendar" / "calendar"
     assert target.is_file()
@@ -76,9 +74,8 @@ def test_cli_init_second_run_does_not_overwrite(
     target.write_text("Jan 1\tCustom event\n", encoding="utf-8")
 
     monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
-    monkeypatch.setattr(sys, "argv", ["pylendar", "--init"])
 
-    main()
+    main(["--init"])
 
     assert target.read_text(encoding="utf-8") == "Jan 1\tCustom event\n"
     out = capsys.readouterr().out
@@ -98,10 +95,9 @@ def test_cli_no_calendar_warning_mentions_init(
     monkeypatch.setattr("pylendar.pylendar.DEFAULT_CALENDAR_PATHS", [])
     monkeypatch.delenv("CALENDAR_DIR", raising=False)
     monkeypatch.chdir(tmp_path)  # cwd has no calendar
-    monkeypatch.setattr(sys, "argv", ["pylendar"])
 
     with caplog.at_level(logging.WARNING, logger="pylendar"):
-        main()
+        main([])
 
     target = fake_home / ".calendar" / "calendar"
     messages = [r.getMessage() for r in caplog.records]
@@ -117,24 +113,21 @@ def test_cli_uses_found_calendar_when_no_flag(
     (tmp_path / "calendar").write_text("Apr 22\tEarth Day\n", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("CALENDAR_DIR", raising=False)
-    monkeypatch.setattr(sys, "argv", ["pylendar", "-t", "20260422"])
 
-    main()
+    main(["-t", "20260422"])
 
     assert "Earth Day" in capsys.readouterr().out
 
 
 def test_cli_f_missing_file_does_not_suggest_init(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """When -f points at a missing file, the warning names that file, not --init."""
     missing = tmp_path / "no-such-file"
-    monkeypatch.setattr(sys, "argv", ["pylendar", "-f", str(missing)])
 
     with caplog.at_level(logging.WARNING, logger="pylendar"):
-        main()
+        main(["-f", str(missing)])
 
     messages = [r.getMessage() for r in caplog.records]
     assert any(str(missing) in m and "--init" not in m for m in messages), messages

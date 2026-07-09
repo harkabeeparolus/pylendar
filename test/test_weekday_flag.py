@@ -1,8 +1,6 @@
 """Tests for the -w (weekday) flag."""
 
 import datetime
-import io
-import sys
 
 from pylendar.pylendar import Event, format_event, main
 
@@ -82,22 +80,14 @@ def test_weekday_flag_multiline(run_calendar):
     ]
 
 
-def test_cli_weekday_flag(tmp_path, monkeypatch):
+def test_cli_weekday_flag(tmp_path, capsys):
     """Smoke test: invoke the CLI with -w and verify weekday names appear."""
     calendar_file = tmp_path / "calendar"
     calendar_file.write_text("01/15\tTest event\n01/16\tAnother event\n")
 
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["pylendar", "-w", "-f", str(calendar_file), "-t", "20260115"],
-    )
-    stdout = io.StringIO()
-    monkeypatch.setattr(sys, "stdout", stdout)
+    main(["-w", "-f", str(calendar_file), "-t", "20260115"])
 
-    main()
-
-    output = stdout.getvalue()
+    output = capsys.readouterr().out
     # Jan 15, 2026 is a Thursday; Jan 16 is a Friday
     assert "Thu Jan 15\tTest event" in output
     assert "Fri Jan 16\tAnother event" in output

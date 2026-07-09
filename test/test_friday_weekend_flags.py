@@ -1,8 +1,6 @@
 """Tests for the -F (friday), -A (business-day), and -W (calendar-day) flags."""
 
 import datetime
-import io
-import sys
 from pathlib import Path
 
 import pytest
@@ -163,7 +161,7 @@ def test_a_flag_mon_a5_exact_range(run_calendar):
 # --- CLI integration tests ---
 
 
-def test_cli_f_flag(tmp_path, monkeypatch):
+def test_cli_f_flag(tmp_path, capsys):
     """Smoke test: -F 4 (BSD Thursday) makes Thursday trigger 3-day look-ahead."""
     calendar_file = tmp_path / "calendar"
     calendar_file.write_text(
@@ -171,27 +169,18 @@ def test_cli_f_flag(tmp_path, monkeypatch):
         "07/11\tSaturday event\n07/12\tSunday event\n"
     )
 
-    # July 9, 2026 is a Thursday; -F 4 = BSD Thursday = Python Wednesday (no!)
-    # BSD 4 = Thursday -> Python weekday 3 (Thursday)
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["pylendar", "-F", "4", "-f", str(calendar_file), "-t", "20260709"],
-    )
-    stdout = io.StringIO()
-    monkeypatch.setattr(sys, "stdout", stdout)
+    # July 9, 2026 is a Thursday; BSD 4 = Thursday -> Python weekday 3
+    main(["-F", "4", "-f", str(calendar_file), "-t", "20260709"])
 
-    main()
-
-    output = stdout.getvalue()
-    # Thursday with -F 4 (BSD Thursday = Python 3) triggers 3-day look-ahead
+    output = capsys.readouterr().out
+    # Thursday as "Friday" triggers the 3-day look-ahead
     assert "Jul  9\tThursday event" in output
     assert "Jul 10\tFriday event" in output
     assert "Jul 11\tSaturday event" in output
     assert "Jul 12\tSunday event" in output
 
 
-def test_cli_a_flag_on_friday(tmp_path, monkeypatch):
+def test_cli_a_flag_on_friday(tmp_path, capsys):
     """Smoke test: -A 2 on a Friday gives 5 days (Fri-Tue, weekend is free)."""
     calendar_file = tmp_path / "calendar"
     calendar_file.write_text(
@@ -199,25 +188,18 @@ def test_cli_a_flag_on_friday(tmp_path, monkeypatch):
         "03/09\tMonday\n03/10\tTuesday\n03/11\tWednesday\n"
     )
 
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["pylendar", "-A", "2", "-f", str(calendar_file), "-t", "20260306"],
-    )
-    stdout = io.StringIO()
-    monkeypatch.setattr(sys, "stdout", stdout)
+    main(["-A", "2", "-f", str(calendar_file), "-t", "20260306"])
 
-    main()
-
-    lines = stdout.getvalue().strip().splitlines()
+    output = capsys.readouterr().out
+    lines = output.strip().splitlines()
     assert len(lines) == 5
     assert "Mar  6\tFriday" in lines[0]
     assert "Mar 10\tTuesday" in lines[-1]
     # Wednesday should NOT appear — only 2 business days ahead.
-    assert "Wednesday" not in stdout.getvalue()
+    assert "Wednesday" not in output
 
 
-def test_cli_w_flag(tmp_path, monkeypatch):
+def test_cli_w_flag(tmp_path, capsys):
     """Smoke test: -W 5 on a Friday gives exactly 5 days forward."""
     calendar_file = tmp_path / "calendar"
     calendar_file.write_text(
@@ -225,17 +207,9 @@ def test_cli_w_flag(tmp_path, monkeypatch):
         "07/13\tMonday\n07/14\tTuesday\n07/15\tWednesday\n"
     )
 
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["pylendar", "-W", "5", "-f", str(calendar_file), "-t", "20260710"],
-    )
-    stdout = io.StringIO()
-    monkeypatch.setattr(sys, "stdout", stdout)
+    main(["-W", "5", "-f", str(calendar_file), "-t", "20260710"])
 
-    main()
-
-    output = stdout.getvalue()
+    output = capsys.readouterr().out
     assert "Jul 10\tFriday" in output
     assert "Jul 15\tWednesday" in output
 
@@ -243,43 +217,28 @@ def test_cli_w_flag(tmp_path, monkeypatch):
 @pytest.mark.parametrize("f_value", ["0", "6"])
 def test_cli_f_flag_accepts_bsd_bounds(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
     f_value: str,
 ) -> None:
     """BSD weekday range endpoints are accepted for -F."""
     calendar_file = tmp_path / "calendar"
     calendar_file.write_text("07/10\tFriday\n")
 
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["pylendar", "-F", f_value, "-f", str(calendar_file), "-t", "20260710"],
-    )
-    stdout = io.StringIO()
-    monkeypatch.setattr(sys, "stdout", stdout)
+    main(["-F", f_value, "-f", str(calendar_file), "-t", "20260710"])
 
-    main()
-
-    assert "Jul 10\tFriday" in stdout.getvalue()
+    assert "Jul 10\tFriday" in capsys.readouterr().out
 
 
 def test_cli_f_flag_rejects_out_of_range(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Out-of-range BSD weekday values are rejected by argparse."""
     calendar_file = tmp_path / "calendar"
     calendar_file.write_text("07/10\tFriday\n")
 
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["pylendar", "-F", "7", "-f", str(calendar_file), "-t", "20260710"],
-    )
-
     with pytest.raises(SystemExit):
-        main()
+        main(["-F", "7", "-f", str(calendar_file), "-t", "20260710"])
 
     assert "BSD weekday out of range [0-6]" in capsys.readouterr().err
 
@@ -287,14 +246,11 @@ def test_cli_f_flag_rejects_out_of_range(
 @pytest.mark.parametrize("flag", ["-A", "-W", "-B"])
 def test_cli_day_window_flags_reject_negative_values(
     flag: str,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Day window flags must not accept negative values."""
-    monkeypatch.setattr(sys, "argv", ["pylendar", flag, "-1"])
-
     with pytest.raises(SystemExit):
-        main()
+        main([flag, "-1"])
 
     err = capsys.readouterr().err
     assert f"argument {flag}: invalid positive_int value" in err

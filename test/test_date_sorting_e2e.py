@@ -5,8 +5,6 @@ and CLI invocation.
 """
 
 import datetime
-import io
-import sys
 
 import pytest
 
@@ -689,20 +687,14 @@ June*\tSummer fun
     ]
 
 
-def test_cli_smoke(tmp_path, monkeypatch):
+def test_cli_smoke(tmp_path, capsys):
     """Smoke test: invoke the CLI entry point and verify it produces expected output."""
     calendar_file = tmp_path / "calendar"
     calendar_file.write_text("01/15\tTest event\n01/16\tAnother event\n")
 
-    monkeypatch.setattr(
-        sys, "argv", ["pylendar", "-f", str(calendar_file), "-t", "20260115"]
-    )
-    stdout = io.StringIO()
-    monkeypatch.setattr(sys, "stdout", stdout)
+    main(["-f", str(calendar_file), "-t", "20260115"])
 
-    main()
-
-    output = stdout.getvalue()
+    output = capsys.readouterr().out
     assert "Jan 15\tTest event" in output
     assert "Jan 16\tAnother event" in output
 
