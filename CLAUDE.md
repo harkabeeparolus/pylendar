@@ -13,6 +13,7 @@ Uses `uv` for package management, `ruff` + `pylint` for linting, and `mypy` (str
 ```bash
 uv sync                  # install to venv
 just check               # lint, autofix, format, typecheck, and test
+just ci                  # same but non-mutating (used by GitHub Actions)
 just test -v test/test_foo.py  # run pytest with optional flags
 just coverage -v         # run pytest with --cov, and any other optional flags
 uv run pylendar          # run pylendar CLI
@@ -23,7 +24,7 @@ just build_man           # build manpage (requires pandoc)
 
 This command tries to be compatible with old versions. Copies of various manpages are available in `docs/*.1.md`. There is a comparison in `docs/manpage_comparison.md`.
 
-There is test data from FreeBSD default calendar files in the `calendars/` subdirectory.
+The `calendars/` subdirectory is a gitignored local symlink to FreeBSD default calendar files, useful for manual testing. It may be absent; no tests depend on it.
 
 ## Architecture
 
