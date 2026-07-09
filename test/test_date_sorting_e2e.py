@@ -5,6 +5,9 @@ and CLI invocation. Per-format output tests live in test_date_formats_e2e.py.
 """
 
 import datetime
+import logging
+
+import pytest
 
 from pylendar.pylendar import (
     DateStringParser,
@@ -185,6 +188,30 @@ def test_cli_smoke(tmp_path, capsys):
     output = capsys.readouterr().out
     assert "Jan 15\tTest event" in output
     assert "Jan 16\tAnother event" in output
+
+
+@pytest.mark.parametrize("flag", ["-v", "-vv"])
+def test_cli_verbose_flags(tmp_path, capsys, caplog, flag):
+    """-v and -vv enable info logging without changing event output."""
+    calendar_file = tmp_path / "calendar"
+    calendar_file.write_text("01/15\tTest event\n")
+
+    with caplog.at_level(logging.INFO, logger="pylendar"):
+        main([flag, "-f", str(calendar_file), "-t", "20260115"])
+
+    assert "Jan 15\tTest event" in capsys.readouterr().out
+    assert "Today: 2026-01-15" in caplog.text
+
+
+def test_cli_malformed_calendar_exits(tmp_path):
+    """A calendar that fails preprocessing exits with an error message."""
+    calendar_file = tmp_path / "calendar"
+    calendar_file.write_text("#include\n01/15\tTest event\n")
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["-f", str(calendar_file), "-t", "20260115"])
+
+    assert "Could not read calendar file" in str(excinfo.value)
 
 
 # ---------------------------------------------------------------------------

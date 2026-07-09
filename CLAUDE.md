@@ -68,7 +68,7 @@ Tests are in `test/` directory:
 - `test_weekday_relative.py` - `Wkday<Date` / `Wkday>Date` weekday-relative-to-date syntax
 - `test_weekday_flag.py` - -w (weekday) flag output formatting
 
-Coverage is at 96% with branch coverage enabled. Untestable boilerplate (dependency `ImportError` guards, `KeyboardInterrupt` handler, `if __name__ == "__main__"`, and the `utcoffset() is None` fallback) is marked `# pragma: no cover`.
+Coverage is at 98% with branch coverage enabled. Untestable boilerplate (dependency `ImportError` guards, `KeyboardInterrupt` handler, `if __name__ == "__main__"`, and the `utcoffset() is None` fallback) is marked `# pragma: no cover`.
 
 ## Linting and Type Checking
 

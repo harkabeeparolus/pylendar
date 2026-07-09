@@ -243,6 +243,16 @@ def test_cli_f_flag_rejects_out_of_range(
     assert "BSD weekday out of range [0-6]" in capsys.readouterr().err
 
 
+def test_cli_f_flag_rejects_non_numeric(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Non-numeric -F values are rejected by argparse."""
+    with pytest.raises(SystemExit):
+        main(["-F", "abc"])
+
+    assert "Invalid BSD weekday: abc" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize("flag", ["-A", "-W", "-B"])
 def test_cli_day_window_flags_reject_negative_values(
     flag: str,
