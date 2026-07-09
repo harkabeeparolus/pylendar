@@ -29,7 +29,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, TypeAlias
+from typing import ClassVar, TypeAlias, final
 
 try:
     import dateutil.easter
@@ -530,6 +530,7 @@ def _parse_signed_int(match: re.Match[str], sign_group: int, value_group: int) -
     return sign * int(match.group(value_group))
 
 
+@final
 class DateStringParser:  # pylint: disable=too-many-instance-attributes
     """Parser for date strings from calendar files.
 
@@ -539,25 +540,6 @@ class DateStringParser:  # pylint: disable=too-many-instance-attributes
     instantiating this class concurrently with other locale-dependent
     operations may cause race conditions.
     """
-
-    month_map: dict[str, int]
-    weekday_map: dict[str, int]
-    ordinal_map: dict[str, int]
-    ordinals_re: str
-
-    _re_special_offset: re.Pattern[str]
-    _re_full_date: re.Pattern[str]
-    _re_slash_dd: re.Pattern[str]
-    _re_mm_wkday_offset: re.Pattern[str]
-    _re_month_wkday_offset: re.Pattern[str]
-    _re_month_day_1: re.Pattern[str]
-    _re_month_day_2: re.Pattern[str]
-    _re_wildcard_wkday: re.Pattern[str]
-    _re_wildcard_day: re.Pattern[str]
-    _re_month_wildcard: re.Pattern[str]
-    _re_mm_ord: re.Pattern[str]
-    _re_month_ord_1: re.Pattern[str]
-    _re_month_ord_2: re.Pattern[str]
 
     def __init__(
         self,
@@ -608,7 +590,7 @@ class DateStringParser:  # pylint: disable=too-many-instance-attributes
             for word, n in zip(dirs.sequence, (1, 2, 3, 4, 5, -1), strict=True):
                 self.ordinal_map[word.casefold()] = n
             log.info(f"Custom ordinal sequence: {dirs.sequence}")
-        self.ordinals_re = "|".join(map(re.escape, self.ordinal_map))
+        ordinals_re = "|".join(map(re.escape, self.ordinal_map))
 
         # Precompile regexes used in parsing
         self._re_special_offset = re.compile(rf"({_LETTER}+)([+-])({_DELTA})")
@@ -624,7 +606,7 @@ class DateStringParser:  # pylint: disable=too-many-instance-attributes
         self._re_wildcard_day = re.compile(r"\*\s*(\d{1,2})|(\d{1,2})\s+\*")
         self._re_month_wildcard = re.compile(rf"({_NAME})\s*\*")
 
-        name, ords = _NAME, self.ordinals_re
+        name, ords = _NAME, ordinals_re
         self._re_mm_ord = re.compile(rf"({_NN})/({name})({ords})([+-]{_DELTA})?")
         self._re_month_ord_1 = re.compile(rf"({name})/({name})({ords})([+-]{_DELTA})?")
         self._re_month_ord_2 = re.compile(rf"({name})({ords})\s+({name})")
@@ -800,13 +782,12 @@ class DateStringParser:  # pylint: disable=too-many-instance-attributes
                 )
         return None
 
-    _WKDAY_REL_RE: ClassVar[re.Pattern[str]] = re.compile(
-        rf"(?P<wkday>{_NAME})\s*(?P<dir>[<>])\s*(?P<anchor>.+)"
-    )
-
-    # Offset capped at 3 digits so 4-digit tails (e.g. Sun<Dec 25-2015)
+    # Anchor offset capped at 3 digits so 4-digit tails (e.g. Sun<Dec 25-2015)
     # aren't misparsed as anchor "Dec 25" with a -2015-day offset.
-    _ANCHOR_OFFSET_RE: ClassVar[re.Pattern[str]] = re.compile(rf"(.+?)([+-]{_DELTA})?$")
+    _WKDAY_REL_RE: ClassVar[re.Pattern[str]] = re.compile(
+        rf"(?P<wkday>{_NAME})\s*(?P<dir>[<>])\s*"
+        rf"(?P<anchor>.+?)(?P<offset>[+-]{_DELTA})?"
+    )
 
     def _parse_weekday_relative(self, date_str: str) -> DateExpr | None:
         """Parse Wkday<Date or Wkday>Date format (e.g., Sat>Jun 19, Sun<Dec 25-7)."""
@@ -820,13 +801,8 @@ class DateStringParser:  # pylint: disable=too-many-instance-attributes
         weekday = self.weekday_map[wkday_name]
         direction = 1 if match.group("dir") == ">" else -1
 
-        anchor_str = match.group("anchor").strip()
-        # Extract optional +/-N offset from the anchor
-        offset_match = self._ANCHOR_OFFSET_RE.fullmatch(anchor_str)
-        if not offset_match:
-            return None
-        base_anchor = offset_match.group(1).strip()
-        anchor_offset = int(offset_match.group(2)) if offset_match.group(2) else 0
+        base_anchor = match.group("anchor").strip()
+        anchor_offset = int(match.group("offset") or 0)
 
         anchor_date = self._parse_month_day(base_anchor) or self._parse_slash_dd(
             base_anchor
@@ -841,6 +817,8 @@ class DateStringParser:  # pylint: disable=too-many-instance-attributes
             direction=direction,
             anchor_offset=anchor_offset,
         )
+
+    _EVERY_DAY_RE: ClassVar[re.Pattern[str]] = re.compile(r"\*\s*\*")
 
     def _parse_format_patterns(self, date_str: str) -> DateExpr | None:
         """Parse regex-based date format patterns."""
@@ -859,7 +837,7 @@ class DateStringParser:  # pylint: disable=too-many-instance-attributes
             self._parse_month_wkday_offset(date_str)
             or self._parse_month_day(date_str)
             or self._parse_month_wildcard(date_str)
-            or (EveryDay() if re.fullmatch(r"\*\s*\*", date_str) else None)
+            or (EveryDay() if self._EVERY_DAY_RE.fullmatch(date_str) else None)
             or self._parse_wildcard_wkday(date_str)
             or self._parse_wildcard_day(date_str)
             or self._parse_wkday_ord_month(date_str)
@@ -915,7 +893,6 @@ class SimpleCPP:
                     raise SyntaxError(msg)
             elif stripped.startswith("#"):
                 log.debug(f"Skipping preprocessor directive: {line}")
-                continue
             else:
                 lines.append(line)
 
