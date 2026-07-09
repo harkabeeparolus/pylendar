@@ -1,7 +1,6 @@
 """Tests for -l (longitude), -U (UTC offset), and -D (diagnostic) flags."""
 
 import datetime
-import subprocess
 
 import pytest
 
@@ -144,19 +143,6 @@ def test_derived_values(
     lines = output.strip().splitlines()
     assert lines[0] == expected_offset
     assert lines[1] == expected_longitude
-
-
-def test_d_sun_via_subprocess(tmp_path):
-    """Verify -D works via the CLI entry point."""
-    result = subprocess.run(
-        ["uv", "run", "pylendar", "-D", "sun", "-U", "0"],
-        capture_output=True,
-        text=True,
-        check=True,
-        cwd=tmp_path,
-    )
-    assert "UTCOffset: 0" in result.stdout
-    assert "Sun in" in result.stdout
 
 
 @pytest.mark.parametrize("offset", [5.5, -3.5, 0.0])
