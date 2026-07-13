@@ -12,14 +12,22 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
         # Oldest supported (requires-python) and latest stable
         python-version: ["3.11", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
+
+      # The LANG= directive tests need a non-English locale installed;
+      # macOS ships de_DE.UTF-8, and on Windows they skip gracefully.
+      - name: Install German locale
+        if: runner.os == 'Linux'
+        run: sudo locale-gen de_DE.UTF-8
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
