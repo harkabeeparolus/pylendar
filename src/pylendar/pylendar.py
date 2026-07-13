@@ -567,9 +567,15 @@ class DateStringParser:  # pylint: disable=too-many-instance-attributes
         finally:
             locale.setlocale(locale.LC_TIME, saved_lc_time)
 
-        # Layer C/English names on top
-        with calendar.different_locale(("C", "UTF-8")):
-            self._layer_locale_maps()
+        # Layer C/English names on top ("C.UTF-8" is not a valid locale
+        # on Windows, so fall back to plain "C"; English names are ASCII)
+        for c_locale in (("C", "UTF-8"), ("C", None)):
+            try:
+                with calendar.different_locale(c_locale):
+                    self._layer_locale_maps()
+            except locale.Error:
+                continue
+            break
 
         # Layer LANG= locale names on top, if set
         lang_base = dirs.lang.lower().split(".")[0] if dirs.lang else None

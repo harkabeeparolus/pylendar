@@ -3,6 +3,7 @@
 import datetime
 import locale
 import logging
+import sys
 
 import dateutil.easter
 import pytest
@@ -162,6 +163,10 @@ def test_english_still_works_with_locale(german_locale: str) -> None:
     assert "jan" in parser.month_map
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows setlocale() uses the system locale, not environment variables",
+)
 def test_environment_locale_names_recognized(
     german_locale: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
