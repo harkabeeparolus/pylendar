@@ -53,6 +53,8 @@ Three main components:
 
 Tests use bare functions (no classes). Group related tests with `# --- section name ---` comment banners. Encode context that a class name would have provided into the function name prefix instead (e.g. `test_replace_age_*`, `test_seasons_*`).
 
+CLI tests call `main([...args])` with the `capsys` fixture — not `sys.argv`/`sys.stdout` monkeypatching.
+
 Tests are in `test/` directory:
 
 - `test_astronomical.py` - Astronomical special dates (moon phases and seasons)

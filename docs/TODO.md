@@ -2,12 +2,7 @@
 
 ## Pending
 
-### 1.0 release
-
-When releasing 1.0, flip the PyPI classifier in `pyproject.toml` from
-`Development Status :: 4 - Beta` to `Development Status :: 5 -
-Production/Stable`, in addition to the usual release checklist in
-CLAUDE.md.
+Nothing at the moment.
 
 ## Out of scope
 

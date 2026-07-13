@@ -7,7 +7,7 @@ license = "BSD-3-Clause"
 license-files = ["LICENSE"]
 keywords = ["calendar", "reminder", "bsd", "dates", "events", "cli"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: End Users/Desktop",
     "Operating System :: POSIX",
