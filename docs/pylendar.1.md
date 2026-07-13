@@ -3,7 +3,7 @@ title: PYLENDAR
 section: 1
 header: General Commands Manual
 date: July 2026
-footer: pylendar 0.9.1
+footer: pylendar 1.0.0
 ---
 <!-- markdownlint-disable single-h1 -->
 
