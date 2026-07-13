@@ -1,5 +1,8 @@
 # pylendar
 
+[![PyPI](https://img.shields.io/pypi/v/pylendar)](https://pypi.org/project/pylendar/)
+[![Tests](https://github.com/harkabeeparolus/pylendar/actions/workflows/tests.yml/badge.svg)](https://github.com/harkabeeparolus/pylendar/actions/workflows/tests.yml)
+
 A Python port of the classic BSD `calendar(1)` reminder tool. You keep a
 plain-text file of dates, and `pylendar` tells you which ones are coming up.
 
