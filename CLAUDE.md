@@ -8,14 +8,15 @@ Pylendar is a Python port of the BSD `calendar(1)` utility. It parses calendar f
 
 ## Build and Development Commands
 
-Uses `uv` for package management, `ruff` + `pylint` for linting, and `mypy` (strict) + `ty` + `basedpyright` for type checking. Run pylint on both `src/` and `test/`. A `Justfile` is provided for convenience; run `just check` after every complete code change.
+Uses `uv` for package management, `ruff` + `pylint` for linting, `mypy` (strict) + `ty` + `basedpyright` for type checking, and `zizmor` for auditing GitHub Actions workflows. Run pylint on both `src/` and `test/`. A `Justfile` is provided for convenience; run `just check` after every complete code change.
 
 ```bash
 uv sync                  # install to venv
-just check               # lint, autofix, format, typecheck, and test
+just check               # lint, autofix, format, typecheck, test, and audit
 just ci                  # same but non-mutating (used by GitHub Actions)
 just test -v test/test_foo.py  # run pytest with optional flags
 just coverage -v         # run pytest with --cov, and any other optional flags
+just audit               # zizmor audit of .github/ (offline mode)
 uv run pylendar          # run pylendar CLI
 just build_man           # build manpage (requires pandoc)
 ```
@@ -75,6 +76,20 @@ Coverage is at 98% with branch coverage enabled. Untestable boilerplate (depende
 ## Linting and Type Checking
 
 Ruff is configured with strict "ALL" rules. Pylint runs on both `src/` and `test/` directories. Both allow f-string interpolation in logging. Mypy runs in strict mode; ty and basedpyright (in `"all"` mode) also run. Type stubs for `astronomy-engine` are in `typings/`.
+
+## GitHub Actions & Dependabot
+
+- Every action in `.github/workflows/` is pinned to a commit SHA with a
+  `# vX.Y.Z` comment (zizmor's blanket policy). To add one, resolve the SHA
+  with `git ls-remote https://github.com/OWNER/REPO 'refs/tags/vX*'` — for
+  annotated tags use the peeled `^{}` commit. Checkout steps set
+  `persist-credentials: false`.
+- Anything under `.github/` must pass `just audit` — zizmor checks
+  `dependabot.yml` too (e.g. requires `cooldown` on update entries).
+- Local zizmor runs offline; `zizmor.yml` CI runs the online audits and
+  uploads SARIF to code scanning, so CI can find things local runs don't.
+- Dependabot bumps action SHAs + version comments and `uv.lock` (grouped,
+  monthly, 7-day cooldown) — don't hand-bump pins, merge its PRs instead.
 
 ## Manpage
 
