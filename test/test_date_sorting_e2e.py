@@ -165,11 +165,15 @@ def test_continuation_lines(run_calendar):
     result = run_calendar(calendar_content, today, ahead=1)
 
     expected = [
-        "Feb  2\tLou Harrison dies in Lafayette, Indiana, en route to a festival\n"
-        "\tof his music at Ohio State University, 2003",
+        (
+            "Feb  2\tLou Harrison dies in Lafayette, Indiana, en route to a festival\n"
+            "\tof his music at Ohio State University, 2003"
+        ),
         "Feb  2\tSimple single-line event",
-        "Feb  3\tThe Day The Music Died; Buddy Holly, Richie Valens, and the Big\n"
-        "\tBopper are killed in a plane crash outside Mason City, Iowa, 1959",
+        (
+            "Feb  3\tThe Day The Music Died; Buddy Holly, Richie Valens, and the Big\n"
+            "\tBopper are killed in a plane crash outside Mason City, Iowa, 1959"
+        ),
     ]
 
     assert result == expected

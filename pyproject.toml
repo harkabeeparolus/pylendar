@@ -79,6 +79,7 @@ ignore = [
     "T20",    # flake8-print (T20)
     "DTZ",    # flake8-datetimez (DTZ)
     "G004",   # flake8-logging-format (G): logging-f-string
+    "CPY001", # flake8-copyright (CPY): licensing lives in LICENSE, not per-file headers
 ]
 
 [tool.basedpyright]
