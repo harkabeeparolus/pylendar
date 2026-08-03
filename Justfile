@@ -9,11 +9,11 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
 _default:
     @just --list
 
-# Autofix, lint, typecheck, and test
-check: fix lint test
+# Autofix, lint, typecheck, test, and audit workflows
+check: fix lint test audit
 
-# Lint, typecheck, and test without modifying files (for CI)
-ci: lint_check lint test
+# Lint, typecheck, test, and audit without modifying files (for CI)
+ci: lint_check lint test audit
 
 # Run the main application
 run *ARGS:
@@ -47,6 +47,10 @@ test *ARGS:
 # Run tests with coverage report
 coverage *ARGS:
     uv run pytest --cov --cov-report=term-missing {{ARGS}}
+
+# Audit GitHub Actions workflows and Dependabot config (zizmor, offline)
+audit:
+    uv run zizmor .
 
 # Autofix ruff issues and format code
 [group('details')]
